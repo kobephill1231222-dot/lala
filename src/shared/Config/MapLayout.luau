@@ -12,13 +12,14 @@ Layout.VillageCenter = Vector3.new(0, 0, 0)
 Layout.GroundY = 0
 
 -- Central shrine terrace and moat
-Layout.TerraceY = 8
+Layout.TerraceY = 5
 Layout.TerraceRadius = 44
 Layout.MoatOuterRadius = 62
+Layout.RingRoadRadius = 75
 Layout.WaterY = -1.6
 
 -- Spirit tree
-Layout.TreeBase = Vector3.new(0, Layout.TerraceY, -4)
+Layout.TreeBase = Vector3.new(0, Layout.TerraceY, -8)
 Layout.TreeHeight = 112
 
 -- Arrival plaza (first spawn)
@@ -33,11 +34,13 @@ Layout.AltarPosition = Layout.CourtyardCenter + Vector3.new(21, 0, 0)
 Layout.SummonRadius = 48 -- server-side: how close a player must be to perform a ritual
 
 -- Village west: Talisman Shop (upgrades) and Training Dojo
-Layout.ShopPosition = Vector3.new(-124, 1, 38)
-Layout.ShopCounter = Layout.ShopPosition + Vector3.new(9, 0, 0)
-Layout.DojoPosition = Vector3.new(-134, 1, -40)
-Layout.DojoYardCenter = Vector3.new(-106, 1, -40)
-Layout.DojoZoneSize = Vector3.new(34, 30, 34)
+Layout.ShopPosition = Vector3.new(-120, 1, 34)
+Layout.ShopCounter = Layout.ShopPosition + Vector3.new(8, 0, 0)
+Layout.WestPlaza = Vector3.new(-92, 0, 0)
+Layout.PagodaPosition = Vector3.new(-168, 0, -2)
+Layout.DojoPosition = Vector3.new(-128, 1, -38)
+Layout.DojoYardCenter = Vector3.new(-100, 1, -38)
+Layout.DojoZoneSize = Vector3.new(30, 30, 30)
 
 -- Cursed Forest (north)
 Layout.ForestGate = Vector3.new(0, 0, -104)
@@ -48,7 +51,7 @@ Layout.ForestZoneSize = Vector3.new(176, 90, 148)
 Layout.PlotSize = 72
 Layout.PlotY = 2
 Layout.PlotRadius = 214
-Layout.PlotAngles = { 50, 104, 148, 212, 256, 310 }
+Layout.PlotAngles = { 45, 115, 150, 210, 245, 315 }
 
 function Layout.plotCFrame(index: number): CFrame
 	local angle = math.rad(Layout.PlotAngles[index])

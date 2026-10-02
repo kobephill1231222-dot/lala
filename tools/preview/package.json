@@ -1,0 +1,10 @@
+{
+  "name": "cursebound-preview",
+  "private": true,
+  "description": "Offline three.js preview renderer for the baked Cursebound Farm map (development aid only).",
+  "type": "module",
+  "dependencies": {
+    "playwright-core": "1.56.1",
+    "three": "0.170.0"
+  }
+}

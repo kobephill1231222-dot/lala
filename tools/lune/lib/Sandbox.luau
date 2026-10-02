@@ -27,6 +27,30 @@ end
 
 local startClock = os.clock()
 
+-- Lune 0.10's CFrame.lookAt mirrors the Z axis (Roblox's is correct), so provide a faithful one.
+local RCFrame = roblox.CFrame
+local function lookAt(at, target, up)
+	up = up or roblox.Vector3.new(0, 1, 0)
+	local look = target - at
+	if look.Magnitude < 1e-9 then
+		return RCFrame.new(at.X, at.Y, at.Z)
+	end
+	look = look.Unit
+	local right = look:Cross(up)
+	if right.Magnitude < 1e-6 then
+		right = look:Cross(roblox.Vector3.new(0, 0, 1))
+		if right.Magnitude < 1e-6 then
+			right = look:Cross(roblox.Vector3.new(1, 0, 0))
+		end
+	end
+	right = right.Unit
+	local upv = right:Cross(look)
+	local back = -look
+	return RCFrame.new(at.X, at.Y, at.Z, right.X, upv.X, back.X, right.Y, upv.Y, back.Y, right.Z, upv.Z, back.Z)
+end
+local CFrameShim = setmetatable({ lookAt = lookAt }, { __index = RCFrame })
+Sandbox.CFrame = CFrameShim
+
 function Sandbox.loadPlace(path: string)
 	return roblox.deserializePlace(fs.readFile(path))
 end
@@ -51,7 +75,7 @@ function Sandbox.new(game, overrides)
 		tick = function() return os.clock() end,
 		time = function() return os.clock() - startClock end,
 		-- Roblox datatypes
-		Axes = roblox.Axes, BrickColor = roblox.BrickColor, CFrame = roblox.CFrame, Color3 = roblox.Color3,
+		Axes = roblox.Axes, BrickColor = roblox.BrickColor, CFrame = CFrameShim, Color3 = roblox.Color3,
 		ColorSequence = roblox.ColorSequence, ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
 		Enum = roblox.Enum, Faces = roblox.Faces, Font = roblox.Font, Instance = roblox.Instance,
 		NumberRange = roblox.NumberRange, NumberSequence = roblox.NumberSequence,
