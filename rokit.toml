@@ -1,0 +1,8 @@
+# Toolchain used to build and verify Cursebound Farm.
+# Install rokit (https://github.com/rojo-rbx/rokit) and run `rokit install`.
+[tools]
+rojo = "rojo-rbx/rojo@7.5.1"
+lune = "lune-org/lune@0.10.4"
+selene = "Kampfkarren/selene@0.29.0"
+stylua = "JohnnyMorganz/StyLua@2.1.0"
+luau-lsp = "JohnnyMorganz/luau-lsp@1.53.1"

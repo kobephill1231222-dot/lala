@@ -1,0 +1,9 @@
+# Build intermediates
+/build/
+sourcemap.json
+roblox.yml
+/tools/preview/node_modules/
+/tools/preview/out/
+*.rbxl.lock
+*.rbxlx.lock
+.DS_Store
