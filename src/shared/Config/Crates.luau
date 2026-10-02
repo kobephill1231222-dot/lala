@@ -77,6 +77,10 @@ for _, def in Crates.List do
 	Crates.ById[def.id] = def
 end
 
+-- Renamed tiers: old id -> new id. Saved crates with an old id are migrated on load.
+-- Never delete a tier id that players may own; add an alias instead.
+Crates.Aliases = {} :: { [string]: string }
+
 -- Luck upgrade: per level, rarer weights grow by this fraction.
 Crates.LuckPerLevel = { Uncommon = 0.03, Rare = 0.06, Epic = 0.1, Legendary = 0.12 }
 

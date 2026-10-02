@@ -207,12 +207,18 @@ local function confirm()
 	end
 end
 
-local function targetFromScreen(position: Vector2): number?
+-- Two coordinate spaces are in play: UserInputService:GetMouseLocation() is in viewport
+-- space (including the top bar inset) and pairs with ViewportPointToRay; InputObject.Position
+-- (clicks and taps) is in GUI space (below the inset) and pairs with ScreenPointToRay.
+-- Mixing them shifts the ray by the inset, so hover and click could pick different targets.
+local function targetFromScreen(position: Vector2, space: "viewport" | "gui"): number?
 	local camera = workspace.CurrentCamera
 	if not camera then
 		return nil
 	end
-	local ray = camera:ViewportPointToRay(position.X, position.Y)
+	local ray = if space == "viewport"
+		then camera:ViewportPointToRay(position.X, position.Y)
+		else camera:ScreenPointToRay(position.X, position.Y)
 	local params = RaycastParams.new()
 	local ignore: { Instance } = {}
 	if player.Character then
@@ -293,14 +299,13 @@ local function begin(newMode: Mode, id: string, preselect: number?)
 		end
 		setSelected(first)
 	end
-	local mouse = player:GetMouse()
 	table.insert(
 		connections,
 		RunService.RenderStepped:Connect(function()
 			if not active or UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
 				return
 			end
-			local index = targetFromScreen(Vector2.new(mouse.X, mouse.Y))
+			local index = targetFromScreen(UserInputService:GetMouseLocation(), "viewport")
 			if index then
 				setSelected(index)
 			end
@@ -320,13 +325,13 @@ local function begin(newMode: Mode, id: string, preselect: number?)
 				return
 			end
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				local index = targetFromScreen(Vector2.new(input.Position.X, input.Position.Y))
+				local index = targetFromScreen(Vector2.new(input.Position.X, input.Position.Y), "gui")
 				if index then
 					setSelected(index)
 					confirm()
 				end
 			elseif input.UserInputType == Enum.UserInputType.Touch then
-				local index = targetFromScreen(Vector2.new(input.Position.X, input.Position.Y))
+				local index = targetFromScreen(Vector2.new(input.Position.X, input.Position.Y), "gui")
 				if index then
 					setSelected(index)
 				end

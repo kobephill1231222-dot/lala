@@ -23,7 +23,12 @@ local new = UIKit.new
 
 local registry: any
 local gui: ScreenGui
-local hudScale: UIScale
+-- The HUD's full-screen container is never scaled (scaling it would also scale the space
+-- its edge anchors live in and push the right-hand menu off screen). Each anchored group
+-- has its own UIScale, which scales around that group's AnchorPoint.
+local hudGroupScales: { UIScale } = {}
+local toastScale: UIScale
+local scroller: ScrollingFrame
 local overlay: Frame
 local dim: TextButton
 local toastHolder: Frame
@@ -50,17 +55,81 @@ local function isTouchDevice(): boolean
 	return UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 end
 
+-- Unscaled sizes of the HUD groups (see buildHud).
+local STATS_WIDTH = 294
+local MENU_WIDTH = 90
+local MENU_HEIGHT = 5 * 70 + 56 + 5 * 8
+local EDGE = 12
+local MIN_PANEL_SCALE = 0.62
+
+-- Usable screen size: the ScreenGui's own size, which already excludes the top bar inset
+-- and device safe areas.
+local function screenSize(): Vector2
+	local size = Vector2.zero
+	if gui then
+		local ok, absolute = pcall(function()
+			return gui.AbsoluteSize
+		end)
+		if ok and absolute then
+			size = absolute
+		end
+	end
+	if size.X < 2 or size.Y < 2 then
+		local camera = workspace.CurrentCamera
+		size = if camera then camera.ViewportSize else Vector2.new(1280, 720)
+	end
+	return size
+end
+
+local function hudScaleFor(size: Vector2, touch: boolean): number
+	local base = math.min(size.X / 1180, size.Y / 660)
+	local hud = math.clamp(base * (if touch then 1.12 else 1), 0.5, 1.25)
+	-- The right-hand menu must fit top to bottom, and the stats column and menu side by side.
+	hud = math.min(hud, (size.Y - 2 * EDGE) / MENU_HEIGHT)
+	hud = math.min(hud, (size.X - 4 * EDGE) / (STATS_WIDTH + MENU_WIDTH))
+	return hud
+end
+UIController._hudScaleFor = hudScaleFor -- for tests
+
+-- Scale for one panel: as large as fits, never below MIN_PANEL_SCALE; a panel that still
+-- doesn't fit becomes scrollable instead of shrinking into unreadable text.
+local function panelScaleFor(panel: any, size: Vector2): number
+	local w, h = panel.root.Size.X.Offset, panel.root.Size.Y.Offset
+	return math.clamp(math.min(size.X * 0.96 / w, (size.Y - 16) * 0.94 / h), MIN_PANEL_SCALE, 1.2)
+end
+
+local function layoutPanel(panel: any, scale: number)
+	local size = screenSize()
+	local w = panel.root.Size.X.Offset * scale
+	local h = panel.root.Size.Y.Offset * scale
+	local canvas = Vector2.new(math.max(size.X, w + 24), math.max(size.Y, h + 24))
+	scroller.CanvasSize = UDim2.fromOffset(canvas.X, canvas.Y)
+	scroller.CanvasPosition = Vector2.new((canvas.X - size.X) / 2, (canvas.Y - size.Y) / 2)
+	local frame = panel.root
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+end
+
 local function computeScales()
-	local camera = workspace.CurrentCamera
-	local size = if camera then camera.ViewportSize else Vector2.new(1280, 720)
+	local size = screenSize()
 	local touch = isTouchDevice()
 	UIController.isTouch = touch
-	local base = math.min(size.X / 1180, size.Y / 660)
-	local hud = math.clamp(base * (if touch then 1.12 else 1), 0.62, 1.25)
-	hudScale.Scale = hud
-	UIController.panelScale = math.clamp(math.min(size.X * 0.95 / 860, (size.Y - 40) * 0.92 / 580), 0.45, 1.2)
-	for _, panel in panels do
-		panel.scale.Scale = UIController.panelScale
+	local hud = hudScaleFor(size, touch)
+	for _, scale in hudGroupScales do
+		scale.Scale = hud
+	end
+	if toastScale then
+		local holder = toastScale.Parent :: Frame
+		holder.Size = UDim2.fromOffset(math.min(640, (size.X - 2 * EDGE) / hud), 240)
+	end
+	UIController.hudScale = hud
+	UIController.panelScale =
+		math.clamp(math.min(size.X * 0.95 / 860, (size.Y - 40) * 0.92 / 580), MIN_PANEL_SCALE, 1.2)
+	if current and panels[current] then
+		local panel = panels[current]
+		local s = panelScaleFor(panel, size)
+		panel.scale.Scale = s
+		layoutPanel(panel, s)
 	end
 end
 
@@ -128,7 +197,8 @@ end
 function UIController.register(name: string, panel: any)
 	panels[name] = panel
 	panel.root.Visible = false
-	panel.root.Parent = overlay
+	panel.root.ZIndex = 2 -- above the click-to-close backdrop
+	panel.root.Parent = scroller
 	panel.scale.Scale = UIController.panelScale
 end
 
@@ -142,9 +212,12 @@ function UIController.open(name: string, args: any?)
 	end
 	current = name
 	dim.Visible = true
+	scroller.Visible = true
 	panel.root.Visible = true
-	panel.scale.Scale = UIController.panelScale * 0.92
-	UIKit.tween(panel.scale, 0.22, { Scale = UIController.panelScale }, Enum.EasingStyle.Back)
+	local target = panelScaleFor(panel, screenSize())
+	layoutPanel(panel, target)
+	panel.scale.Scale = target * 0.92
+	UIKit.tween(panel.scale, 0.22, { Scale = target }, Enum.EasingStyle.Back)
 	if panel.onOpen then
 		panel.onOpen(args)
 	end
@@ -158,6 +231,7 @@ function UIController.close(silent: boolean?)
 	local panel = panels[current]
 	current = nil
 	dim.Visible = false
+	scroller.Visible = false
 	if panel then
 		panel.root.Visible = false
 		if panel.onClose then
@@ -309,16 +383,18 @@ local function buildHud()
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 	})
-	hudScale = new("UIScale", { Parent = root })
 
 	-- Stats column (top-left)
 	local stats = new("Frame", {
+		Name = "Stats",
 		Parent = root,
-		Position = UDim2.fromOffset(14, 10),
-		Size = UDim2.fromOffset(290, 260),
+		AnchorPoint = Vector2.zero,
+		Position = UDim2.fromOffset(EDGE, EDGE),
+		Size = UDim2.fromOffset(STATS_WIDTH, 260),
 		BackgroundTransparency = 1,
 		UIKit.list(Enum.FillDirection.Vertical, 8),
 	})
+	table.insert(hudGroupScales, new("UIScale", { Parent = stats }))
 	local cashCard = card(stats, 66, 280, 1)
 	cashCard.Name = "CashCard"
 	cashIcon = UIKit.cashIcon(46)
@@ -422,10 +498,11 @@ local function buildHud()
 
 	-- Menu buttons (right side)
 	local menu = new("Frame", {
+		Name = "Menu",
 		Parent = root,
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -12, 0.48, 0),
-		Size = UDim2.fromOffset(90, 520),
+		Position = UDim2.new(1, -EDGE, 0.5, 0),
+		Size = UDim2.fromOffset(MENU_WIDTH, MENU_HEIGHT),
 		BackgroundTransparency = 1,
 		UIKit.list(
 			Enum.FillDirection.Vertical,
@@ -434,6 +511,7 @@ local function buildHud()
 			Enum.VerticalAlignment.Center
 		),
 	})
+	table.insert(hudGroupScales, new("UIScale", { Parent = menu }))
 	for i, info in MENU do
 		local small = info.name == "Settings"
 		local scale = new("UIScale")
@@ -509,9 +587,10 @@ local function buildHud()
 	end)
 
 	toastHolder = new("Frame", {
+		Name = "Toasts",
 		Parent = root,
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -140),
+		Position = UDim2.new(0.5, 0, 1, -110),
 		Size = UDim2.fromOffset(640, 240),
 		BackgroundTransparency = 1,
 		UIKit.list(
@@ -521,6 +600,8 @@ local function buildHud()
 			Enum.VerticalAlignment.Bottom
 		),
 	})
+	toastScale = new("UIScale", { Parent = toastHolder })
+	table.insert(hudGroupScales, toastScale)
 end
 
 local function refreshNumbers()
@@ -644,6 +725,31 @@ function UIController.init(reg: any)
 		BackgroundColor3 = Color3.new(0, 0, 0),
 		BackgroundTransparency = 0.5,
 		Visible = false,
+	})
+	-- Panels live in a scroller: if one can't fit at a readable scale it can be panned.
+	scroller = new("ScrollingFrame", {
+		Name = "PanelScroller",
+		Parent = overlay,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollingDirection = Enum.ScrollingDirection.XY,
+		ScrollBarThickness = 8,
+		ScrollBarImageColor3 = Theme.Gold,
+		CanvasSize = UDim2.new(),
+		ElasticBehavior = Enum.ElasticBehavior.Never,
+		Visible = false,
+		ZIndex = 11,
+	})
+	-- Clicking outside the panel closes it.
+	new("TextButton", {
+		Name = "Backdrop",
+		Parent = scroller,
+		Size = UDim2.fromScale(1, 1),
+		Text = "",
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		ZIndex = 1,
 		Activated = function()
 			UIController.close()
 		end,
@@ -657,6 +763,7 @@ function UIController.start()
 	if camera then
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(computeScales)
 	end
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(computeScales)
 	UserInputService.LastInputTypeChanged:Connect(computeScales)
 	RunService.RenderStepped:Connect(refreshNumbers)
 	registry.StateController.Ready:Connect(function()

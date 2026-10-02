@@ -11,6 +11,13 @@ scripts in this repo.
 
 ![Your Farm](docs/previews/05_farm_inside.jpg)
 
+> **Current state (after the October 2 Studio audit):** the defects the audit confirmed are
+> fixed (see *Audit fixes*). The orb conveyor is rejected, and the part-built characters and
+> props are being replaced with Marketplace avatar items and Toolbox models. That work is
+> planned in [`docs/NEXT_STEPS_PROPOSAL.md`](docs/NEXT_STEPS_PROPOSAL.md) and waits on a few
+> decisions plus network access to Roblox's catalog. Until then the visuals in this build
+> are the old prototype ones.
+
 > **Studio status: I had no Roblox Studio connection.** This was built in a cloud container
 > without Studio, so **no checks ran in Roblox Studio**. The handoff is the place file
 > **[`dist/JJKFarm.rbxl`](dist/JJKFarm.rbxl)**, which contains the whole map, lighting and every
@@ -239,17 +246,36 @@ with the Roblox client (`rbxasset://sounds/...`), so they load without uploads o
 but there are only a few of them. Put Creator Store audio IDs in the `id` fields to improve
 them. Music is silent until you add an ID.
 
+## Audit fixes (October 2)
+
+| Audit finding | Fix |
+|---|---|
+| Navigation buttons off screen (1558 x 753 viewport) | The full-screen HUD container is no longer scaled. The stats column, right-hand menu and toasts each scale around their own screen-edge anchor, and the scale is capped so the menu fits top to bottom and beside the stats column. Sizes come from the ScreenGui's own size, so the top-bar inset and safe areas are excluded. Panels that can't fit at a readable scale (minimum 0.62) scroll instead of shrinking. |
+| A second server could take a live save lock after 12 s | The lock is now a lease. It is only taken over once it hasn't been renewed for 300 s, never "after N retries". A loading server asks the holder (via MessagingService) to save and release, then retries. The owning server refuses changes 60 s before its lease could lapse if saves keep failing, and retries the save every 15 s. |
+| Malformed saved data became a fresh profile | Stored data is validated before use. Wrong types where tables or numbers belong, or a newer data version, are refused: the player is asked to rejoin, nothing is written, and corrupt records get a `meta.quarantine` note for recovery. Defaults are only created when the store has no record at all. |
+| Moving a finished crate restarted its timer | `remaining = 0` is kept through Pick Up, save and Place, so a finished crate stays finished. |
+| Unknown crate tiers deleted on load | Unknown or malformed crates (and sorcerers) are preserved in `orphanCrates` / `orphanUnits` and restored when the tier exists again. `Crates.Aliases` migrates renamed tiers. |
+| Touch pads skipped range checks | Collect and Sell are range- and alive-checked on every path, prompts and touch pads alike. |
+| Placement mixed screen coordinate spaces | Hover uses `GetMouseLocation` with `ViewportPointToRay`. Clicks and taps use `InputObject.Position` with `ScreenPointToRay`. |
+| Tutorial could point at an impossible action after a detour | `Tutorial.guidance` reads the farm's actual state (crate picked up, no Sorcerer placed, nothing carried, not enough Cash) and gives a doable instruction and target. Unit-tested. |
+
+Not fixed here, by design: the visible-versus-credited production mismatch and the offline
+capacity problem both belong to the orb system being replaced. The replacement's single
+production schedule and its storage targets are in the proposal. Audio still needs
+Creator Store IDs. A multi-device performance pass needs Studio and real devices.
+
 ## Verification
 
-**Checks run in Roblox Studio: none.** I had no Studio connection. These checks ran offline
-in this environment, against the same scripts and the same baked place file:
+**Checks run in Roblox Studio by me: none.** I have no Studio connection. Your October 2
+audit is the only Studio testing so far. These checks ran offline in this environment,
+against the same scripts and the same baked place file:
 
 | Check | Result |
 |---|---|
 | `luau-lsp analyze` with Roblox type definitions over all of `src/` | 0 errors |
-| Unit tests (economy, crates and odds, Orb Box, collect/sell, offline cap and once-only claim, upgrades, tutorial, profile repair, session-locked persistence) | 42 / 42 pass |
-| **Server playtest**: the real `Main.server.luau` in a Lune engine shim against `dist/JJKFarm.rbxl`, playing **Starter Crate -> Place -> Opening Time -> Open -> Place Sorcerer -> orbs fill the box -> Collect -> carry -> Sell -> Buy -> Upgrade** through the remotes. Also: touch pads, reinvesting (slots, pads, walk speed, Pick Up and re-place of a crate keeping its time, swaps, Sorcerer Upgrade, Pick Up), validation and rate limits, a second player who can't touch your farm, respawn at Your Farm, leave/save/release, offline progress paid once, a failed-load kick that leaves data untouched, and shutdown saves | 112 / 112 checks pass |
-| **Client smoke test**: the real client scripts with a stubbed engine. HUD, every prompt and its text, production (technique animations fire, orbs travel the lane, the box fill rises), crate timers, every panel and button, placement previews for Sorcerers and Crates, all effects, notifications, every tutorial step, the crate reveal through to Place, and hotkeys | 22 / 22 steps pass |
+| Unit tests (economy, crates and odds, Orb Box, collect/sell, offline cap and once-only claim, upgrades, tutorial and detour guidance, profile validation and repair, lease locking with two servers including the audit's 12-second case, handoff, newer-version refusal, quarantine, finished-crate pickup) | 53 / 53 pass |
+| **Server playtest**: the real `Main.server.luau` in a Lune engine shim against `dist/JJKFarm.rbxl`, playing **Starter Crate -> Place -> Opening Time -> Open -> Place Sorcerer -> orbs fill the box -> Collect -> carry -> Sell -> Buy -> Upgrade** through the remotes. Also: touch pads, reinvesting (slots, pads, walk speed, Pick Up and re-place of a crate keeping its time, swaps, Sorcerer Upgrade, Pick Up), validation and rate limits, a second player who can't touch your farm, respawn at Your Farm, leave/save/release, offline progress paid once, a failed-load kick that leaves data untouched, malformed and newer saves refused untouched, a live lease on another server never taken, changes paused near lease expiry, release handoff, touch pads range- and alive-checked, and shutdown saves | 127 / 127 checks pass |
+| **Client smoke test**: the real client scripts with a stubbed engine. HUD (including on-screen menu bounds at seven screen sizes from portrait phone to 1440p), every prompt and its text, production (technique animations fire, orbs travel the lane, the box fill rises), crate timers, every panel and button, placement previews for Sorcerers and Crates, all effects, notifications, every tutorial step, the crate reveal through to Place, and hotkeys | 23 / 23 steps pass |
 | Economy pacing simulation (2-hour bot) | see *Pacing* |
 | Bake contract checks (6 farms x 10 slots x 4 pads, rings, locks, lane, Orb Box, Collect Pad, Sell Pad, crate displays, shop counters, spawn) | pass |
 | Map scale and composition | reviewed in aerial, plaza, gate, slot, pad, shop and Sell Stand previews with 5.2-stud avatar stand-ins |
@@ -260,9 +286,10 @@ a manual pass in Studio** with `docs/PLAYTEST_CHECKLIST.md`.
 ## Known limitations
 
 - **Not run in Roblox Studio** (no Studio connection here). See *Verification*.
-- **No Toolbox, Blender or uploaded assets.** Roblox's asset domains weren't reachable.
-  Everything is primitives (parts, wedges, ellipsoids, neon) with built-in particle textures
-  and sounds. There are no custom meshes, decals or images.
+- **No Toolbox or Marketplace assets yet.** This session's network policy blocks every
+  Roblox domain, so I can't search or verify asset IDs. Characters and props are still
+  primitives. The switch to Marketplace avatar items and Toolbox models is planned in
+  `docs/NEXT_STEPS_PROPOSAL.md`.
 - **Technique animations move the whole Sorcerer** (lunge, sweep, rise, recoil) plus effects.
   Limb animation would need uploaded animation assets or rigged models.
 - **Audio is minimal** (see *Sound*).

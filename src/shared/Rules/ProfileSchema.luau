@@ -1,7 +1,11 @@
 --!strict
 -- Profile shape, defaults, migration and validation.
--- `sanitize` repairs malformed fields but never discards data it doesn't understand:
--- sorcerers with unknown ids are moved to `orphanUnits` and written back untouched.
+-- `validate` decides whether stored data can be loaded at all. Data that isn't shaped like a
+-- profile (wrong types where tables or numbers belong, or a newer version than this server
+-- understands) is refused, so the server never replaces real progress with defaults.
+-- `sanitize` then repairs individual values but never discards data it doesn't understand:
+-- unknown or malformed sorcerers go to `orphanUnits`, unknown or malformed crates go to
+-- `orphanCrates`, and both are written back untouched (and restored if they become valid).
 --
 -- Everything the farm needs to resume is persisted: owned Sorcerers and their levels,
 -- slot placements, farm upgrades, Crates (including which pad they sit on and the
@@ -57,6 +61,7 @@ local function emptyProfile(now: number): { [string]: any }
 		stats = { cratesBought = 0, cratesOpened = 0, orbsSold = 0, cashEarned = 0, sessions = 0 },
 		settings = { music = true, sfx = true },
 		orphanUnits = {},
+		orphanCrates = {},
 		createdAt = now,
 		lastSeen = now,
 	}
@@ -93,13 +98,53 @@ local function trackMax(key: string, current: number): number
 	return current
 end
 
+local TABLE_FIELDS = {
+	"units",
+	"slots",
+	"crates",
+	"upgrades",
+	"box",
+	"carried",
+	"discovered",
+	"stats",
+	"settings",
+	"orphanUnits",
+	"orphanCrates",
+}
+local NUMBER_FIELDS = { "version", "cash", "nextUid", "nextCid", "tutorial", "createdAt", "lastSeen" }
+
+-- Can this stored value be loaded as a profile? Returns (true) or (false, reason, kind)
+-- where kind is "corrupt" or "newer". Missing fields are fine (they get defaults); fields of
+-- the wrong type are not, because "repairing" them would silently wipe progress.
+function ProfileSchema.validate(raw: any): (boolean, string?, string?)
+	if type(raw) ~= "table" then
+		return false, "profile is a " .. type(raw) .. ", not a table", "corrupt"
+	end
+	for _, field in TABLE_FIELDS do
+		local v = raw[field]
+		if v ~= nil and type(v) ~= "table" then
+			return false, string.format("%s is a %s", field, type(v)), "corrupt"
+		end
+	end
+	for _, field in NUMBER_FIELDS do
+		local v = raw[field]
+		if v ~= nil and type(v) ~= "number" then
+			return false, string.format("%s is a %s", field, type(v)), "corrupt"
+		end
+	end
+	if type(raw.version) == "number" and raw.version > GameConfig.DataVersion then
+		return false,
+			string.format("saved by data version %d (this server: %d)", raw.version, GameConfig.DataVersion),
+			"newer"
+	end
+	return true, nil, nil
+end
+
 -- Returns a clean profile plus a list of repairs that were made (for logging).
+-- `raw` must have passed `validate`.
 function ProfileSchema.sanitize(raw: any, now: number): ({ [string]: any }, { string })
 	local issues: { string } = {}
-	if type(raw) ~= "table" then
-		table.insert(issues, "profile was not a table; created new profile")
-		return ProfileSchema.new(now), issues
-	end
+	assert(ProfileSchema.validate(raw), "sanitize called on data that failed validate")
 	raw = ProfileSchema.migrate(raw)
 	local p = emptyProfile(now)
 	p.version = raw.version
@@ -122,7 +167,8 @@ function ProfileSchema.sanitize(raw: any, now: number): ({ [string]: any }, { st
 					table.insert(issues, "unknown sorcerer id preserved: " .. unit.id)
 				end
 			else
-				table.insert(issues, "malformed sorcerer dropped: " .. uid)
+				p.orphanUnits[uid] = unit
+				table.insert(issues, "malformed sorcerer preserved: " .. uid)
 			end
 			-- Count every key (even dropped ones) so uids are never reused.
 			maxUid = trackMax(uid, maxUid)
@@ -175,26 +221,37 @@ function ProfileSchema.sanitize(raw: any, now: number): ({ [string]: any }, { st
 		end
 	end
 
-	-- Crates: unknown tiers are dropped (a crate is not progress worth an orphan list);
-	-- each unlocked pad holds at most one crate; opening timestamps are kept as absolute
-	-- times so crates finish while the player is away.
+	-- Crates: each unlocked pad holds at most one crate; opening timestamps are kept as
+	-- absolute times so crates finish while the player is away. Unknown tiers (renamed or
+	-- from a newer release) go to `orphanCrates` and come back once the tier exists again;
+	-- `Crates.Aliases` maps renamed tiers to their new id.
 	local maxCid = 0
-	if type(raw.crates) == "table" then
-		local padUsed: { [number]: boolean } = {}
-		-- Oldest crate first so a pad conflict always resolves the same way.
-		local keys = {}
-		for key in raw.crates do
-			table.insert(keys, key)
+	local padUsed: { [number]: boolean } = {}
+	local entries: { { key: any, crate: any } } = {}
+	for _, source in { raw.crates, raw.orphanCrates } do
+		if type(source) == "table" then
+			for key, crate in source do
+				table.insert(entries, { key = key, crate = crate })
+			end
 		end
-		table.sort(keys, function(a, b)
-			return (tonumber(a) or math.huge) < (tonumber(b) or math.huge)
-		end)
-		for _, key in keys do
-			local crate = raw.crates[key]
-			local cid = tostring(key)
+	end
+	-- Oldest crate first so a pad conflict always resolves the same way.
+	table.sort(entries, function(a, b)
+		return (tonumber(a.key) or math.huge) < (tonumber(b.key) or math.huge)
+	end)
+	do
+		for _, entry in entries do
+			local crate = entry.crate
+			local cid = tostring(entry.key)
+			if p.crates[cid] ~= nil or p.orphanCrates[cid] ~= nil then
+				continue -- the same id in both lists: keep the first
+			end
 			maxCid = trackMax(cid, maxCid)
-			if type(crate) == "table" and type(crate.tier) == "string" and Crates.get(crate.tier) then
-				local clean: { [string]: any } = { tier = crate.tier }
+			local tier = if type(crate) == "table" and type(crate.tier) == "string"
+				then Crates.Aliases[crate.tier] or crate.tier
+				else nil
+			if tier and Crates.get(tier) then
+				local clean: { [string]: any } = { tier = tier }
 				local pad = crate.pad
 				if
 					isFiniteNumber(pad)
@@ -210,12 +267,14 @@ function ProfileSchema.sanitize(raw: any, now: number): ({ [string]: any }, { st
 				elseif pad ~= nil then
 					table.insert(issues, "crate returned to inventory: " .. cid)
 				end
-				if clean.pad == nil and isFiniteNumber(crate.remaining) and crate.remaining > 0 then
+				-- `remaining` 0 means the crate already finished opening: keep it.
+				if clean.pad == nil and isFiniteNumber(crate.remaining) and crate.remaining >= 0 then
 					clean.remaining = crate.remaining
 				end
 				p.crates[cid] = clean
 			else
-				table.insert(issues, "unknown crate dropped: " .. cid)
+				p.orphanCrates[cid] = crate
+				table.insert(issues, "unknown crate preserved: " .. cid)
 			end
 		end
 	end

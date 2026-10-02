@@ -35,7 +35,7 @@ local function ensureLeaderstats(player: Player): StringValue
 end
 
 local function send(player: Player)
-	local session = services.DataService.getSession(player)
+	local session = services.DataService.peekSession(player)
 	if not session then
 		return
 	end

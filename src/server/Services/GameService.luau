@@ -35,8 +35,14 @@ local function fail(message: string): Result
 	return { ok = false, message = message }
 end
 
+-- The character's root part, only while the character is alive. Every position-gated
+-- action (prompts and touch pads alike) goes through this.
 local function rootOf(player: Player): BasePart?
 	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return nil
+	end
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	return if root and root:IsA("BasePart") then root else nil
 end
@@ -101,19 +107,19 @@ local function requireFarm(player: Player, session: any): (number?, string?)
 	return farm, nil
 end
 
--- Collect and Sell are shared by the touch pads and the client's prompts.
+-- Collect and Sell are shared by the touch pads and the client's prompts. Both paths are
+-- range-checked here; a touch event alone proves nothing (clients control their parts).
 function GameService.collect(player: Player, source: string): Result
 	local session = services.DataService.getSession(player)
 	local farm = services.FarmService.farmOf(player)
 	if not session or not farm then
 		return fail("Your farm isn't ready yet.")
 	end
-	if source ~= "touch" then
-		local box = Layout.boxWorld(farm)
-		if distanceTo(player, box) > GameConfig.CollectRange then
-			return fail("Walk up to your Orb Box to Collect.")
-		end
+	local box = Layout.boxWorld(farm)
+	if distanceTo(player, box) > GameConfig.CollectRange then
+		return fail("Walk up to your Orb Box to Collect.")
 	end
+	local _ = source
 	local ok, result = Actions.collect(session.profile, now())
 	if not ok then
 		return fail(result)
@@ -129,9 +135,10 @@ function GameService.sell(player: Player, source: string): Result
 	if not session then
 		return fail("Your farm isn't ready yet.")
 	end
-	if source ~= "touch" and distanceTo(player, Layout.SellStand) > GameConfig.SellRange then
+	if distanceTo(player, Layout.SellStand) > GameConfig.SellRange then
 		return fail("Bring your orbs to the Sell Stand in the plaza.")
 	end
+	local _ = source
 	local ok, result = Actions.sell(session.profile)
 	if not ok then
 		return fail(result)
@@ -368,6 +375,9 @@ local function onRequest(player: Player, action: any, payload: any): Result
 	end
 	local session = services.DataService.getSession(player)
 	if not session then
+		if services.DataService.isPaused(player) then
+			return fail("Saving is delayed, so changes are paused for a moment.")
+		end
 		return fail("Your farm is still loading...")
 	end
 	local ok, result = pcall(handlers[action], player, session, payload)

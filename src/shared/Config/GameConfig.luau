@@ -35,9 +35,14 @@ GameConfig.SellRange = 26
 GameConfig.ShopRange = 40
 
 -- Persistence
+-- The session lock is a lease: every save renews it, and another server may only take a
+-- profile over once it hasn't been renewed for SessionLockStaleSeconds. Autosave runs well
+-- inside that, and a server stops accepting changes 60 s before its lease could lapse.
 GameConfig.AutosaveInterval = 90
 GameConfig.SessionLockStaleSeconds = 300
-GameConfig.LoadRetries = 5
+-- A joining player waits up to about LoadRetries x LoadRetryDelay seconds for the previous
+-- server to hand the profile over (it's asked to release immediately).
+GameConfig.LoadRetries = 6
 GameConfig.LoadRetryDelay = 3
 GameConfig.SaveRetries = 4
 

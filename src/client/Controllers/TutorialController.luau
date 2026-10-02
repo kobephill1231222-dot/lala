@@ -9,12 +9,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Crates = require(Shared.Config.Crates)
 local GameConfig = require(Shared.Config.GameConfig)
 local Layout = require(Shared.Config.FarmLayout)
 local Tutorial = require(Shared.Rules.Tutorial)
 local Economy = require(Shared.Rules.Economy)
-local Format = require(Shared.Util.Format)
 
 local UI = script.Parent.Parent.UI
 local UIKit = require(UI.UIKit)
@@ -64,46 +62,6 @@ local function targetPosition(target: string, profile: any): Vector3?
 		return Layout.UpgradeShop + Vector3.new(0, 4, -8)
 	end
 	return nil
-end
-
-local function hintFor(step: any, profile: any): string
-	local state = registry.StateController
-	if step.event == "openCrate" then
-		for pad = 1, Economy.unlockedPads(profile) do
-			local _, crate = state.crateOnPad(pad)
-			if crate then
-				local remaining = crate.readyAt - state.now()
-				if remaining > 0 then
-					return "Opening Time: "
-						.. Format.clock(remaining)
-						.. ". When it's ready, press Open on the crate."
-				end
-				return "Your crate is ready! Walk up to it and press Open."
-			end
-		end
-	elseif step.event == "collect" then
-		local orbs = state.box()
-		if orbs < 1 then
-			return "Watch your Sorcerer make Cursed Orbs. They roll down the lane into your Orb Box."
-		end
-	elseif step.event == "buyCrate" then
-		local price = (Crates.get("basic") :: any).price
-		if profile.cash < price then
-			return string.format(
-				"Collect and Sell more Cursed Orbs until you have %s for a Basic Crate.",
-				Format.cash(price)
-			)
-		end
-	elseif step.event == "upgrade" then
-		local cost = Economy.upgradeCost("orbValue", Economy.upgradeLevel(profile, "orbValue")) or 0
-		if profile.cash < cost then
-			return string.format(
-				"Earn %s, then visit the Upgrade Shop and Upgrade Orb Value.",
-				Format.cash(cost)
-			)
-		end
-	end
-	return step.text
 end
 
 local function ensurePlayerAttachment(): Attachment?
@@ -200,24 +158,15 @@ function TutorialController.refresh()
 	end
 	stepLabel.Text = string.format("STEP %d / %d", profile.tutorial, #Tutorial.Steps)
 	titleLabel.Text = step.title
-	bodyLabel.Text = hintFor(step, profile)
+	local text, target = Tutorial.guidance(profile, registry.StateController.now())
+	bodyLabel.Text = text or step.text
 	for i, dot in dots do
 		dot.BackgroundColor3 = if i < profile.tutorial
 			then Theme.Good
 			elseif i == profile.tutorial then Theme.Gold
 			else Theme.PanelLighter
 	end
-	local target = step.target
-	-- Need Cash for the shop steps? Point back at the Orb Box first.
-	if
-		step.event == "buyCrate"
-		and profile.cash < (Crates.get("basic") :: any).price
-		and profile.carried.orbs < 1
-	then
-		target = "Box"
-	elseif step.event == "buyCrate" and profile.cash < (Crates.get("basic") :: any).price then
-		target = "Sell"
-	end
+	target = target or step.target
 	pointTo(targetPosition(target, profile), LABELS[target])
 end
 

@@ -79,6 +79,8 @@ return function(ctx)
 			expect(p.crates["2"].readyAt).toBe(T0 + 50)
 			expect(p.crates["3"].pad).toBe(nil) -- returned to inventory
 			expect(p.crates["4"]).toBe(nil)
+			expect(p.orphanCrates["4"].tier).toBe("gone") -- preserved, not deleted
+			expect(p.orphanUnits["6"]).toBe("junk") -- malformed entries are kept too
 			expect(p.crates["5"].pad).toBe(nil)
 			expect(p.nextCid).toBe(6)
 			expect(p.box.orbs).toBe(0)
@@ -88,6 +90,21 @@ return function(ctx)
 			expect(p.tutorial).toBe(Tutorial.Done)
 			expect(p.settings.music).toBe(true)
 			expect(#issues).toBeGreaterThan(0)
+		end)
+
+		it("restores orphaned crates once their tier exists again (or is aliased)", function()
+			local raw = Schema.new(T0)
+			raw.orphanCrates = { ["7"] = { tier = "old_basic", remaining = 4 } }
+			local p = Schema.sanitize(raw, T0)
+			expect(p.crates["7"]).toBe(nil)
+			expect(p.orphanCrates["7"].tier).toBe("old_basic")
+			Crates.Aliases.old_basic = "basic"
+			local restored = Schema.sanitize(p, T0)
+			Crates.Aliases.old_basic = nil
+			expect(restored.crates["7"].tier).toBe("basic")
+			expect(restored.crates["7"].remaining).toBe(4)
+			expect(restored.orphanCrates["7"]).toBe(nil)
+			expect(restored.nextCid).toBe(8)
 		end)
 
 		it("restores orphaned sorcerers whose definition exists again", function()
@@ -227,6 +244,19 @@ return function(ctx)
 			expect((Actions.placeCrate(p, "99", 2, T0))).toBe(false)
 			p.upgrades.pads = 1
 			expect((Actions.placeCrate(p, "2", 3, T0))).toBe(true)
+		end)
+
+		it("a finished crate stays finished through Pick Up, save and Place", function()
+			-- The reviewer's case: ready at 1010, picked up at 1020, placed again at 1020.
+			local p = Schema.new(T0)
+			Actions.placeCrate(p, "1", 1, T0)
+			expect((Actions.pickUpCrate(p, 1, T0 + 20))).toBe(true)
+			expect(p.crates["1"].remaining).toBe(0)
+			local loaded = Schema.sanitize(p, T0 + 20)
+			expect(loaded.crates["1"].remaining).toBe(0)
+			local _, res = Actions.placeCrate(loaded, "1", 2, T0 + 20)
+			expect(res.readyAt).toBe(T0 + 20)
+			expect((Actions.openCrate(loaded, 2, Prng.new(1), T0 + 20))).toBe(true)
 		end)
 
 		it("picks a crate up keeping its remaining Opening Time", function()
@@ -466,6 +496,46 @@ return function(ctx)
 			expect(p.tutorial).toBe(Tutorial.Done)
 			expect(p.cash).toBe(125)
 			expect((Tutorial.advance(p, "upgrade"))).toBe(nil)
+		end)
+
+		it("guides the player back after detours", function()
+			-- Step 2, but the crate was picked up again
+			local p = Schema.new(T0)
+			Actions.placeCrate(p, "1", 1, T0)
+			Tutorial.advance(p, "placeCrate")
+			local text, target = Tutorial.guidance(p, T0 + 3)
+			expect(target).toBe("Pad")
+			expect(string.find(text, "Opening Time") ~= nil).toBe(true)
+			Actions.pickUpCrate(p, 1, T0 + 3)
+			text, target = Tutorial.guidance(p, T0 + 3)
+			expect(target).toBe("Pad")
+			expect(string.find(text, "back in your inventory") ~= nil).toBe(true)
+
+			-- Step 4 (collect), but the only Sorcerer was picked up and the box is empty
+			local q = starterFarm()
+			for _, event in { "placeCrate", "openCrate", "placeSorcerer" } do
+				Tutorial.advance(q, event)
+			end
+			Actions.pickUpSorcerer(q, 1, T0 + 10)
+			text, target = Tutorial.guidance(q, T0 + 10)
+			expect(target).toBe("Slot")
+			-- Step 5 (sell) with nothing carried but a full box points at the box
+			Actions.placeSorcerer(q, next(q.units), 1, T0 + 10)
+			Actions.collect(q, T0 + 30)
+			Tutorial.advance(q, "collect")
+			expect(select(2, Tutorial.guidance(q, T0 + 30))).toBe("Sell")
+			Actions.sell(q)
+			q.tutorial = 5 -- pretend the sell step is still current with nothing carried
+			expect(select(2, Tutorial.guidance(q, T0 + 31))).toBe("Box")
+			-- Step 6 (buy) without enough Cash sends the player to earn it first
+			q.tutorial = 6
+			q.cash = 0
+			text, target = Tutorial.guidance(q, T0 + 40)
+			expect(target).toBe("Box")
+			q.cash = 1000
+			expect(select(2, Tutorial.guidance(q, T0 + 40))).toBe("CrateShop")
+			q.tutorial = Tutorial.Done
+			expect(Tutorial.guidance(q, T0)).toBe(nil)
 		end)
 
 		it("can be skipped", function()

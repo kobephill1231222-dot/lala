@@ -84,4 +84,98 @@ function Tutorial.skip(profile: any)
 	profile.tutorial = Tutorial.Done
 end
 
+-- What the player should do right now for the current step, judged from the farm's actual
+-- state rather than the step alone, so detours (picking the crate back up, removing the only
+-- Sorcerer, running out of Cash) always get an instruction the player can follow.
+-- Returns (text, target) or nil when the tutorial is finished.
+function Tutorial.guidance(profile: any, now: number): (string?, string?)
+	local step = Tutorial.current(profile)
+	if not step then
+		return nil, nil
+	end
+	local Economy = require(script.Parent.Economy)
+	local Crates = require(script.Parent.Parent.Config.Crates)
+
+	local onPad, unplaced = nil, 0
+	for _, crate in profile.crates do
+		if crate.pad then
+			onPad = onPad or crate
+		else
+			unplaced += 1
+		end
+	end
+	local placed = next(profile.slots) ~= nil
+	local boxOrbs = Economy.boxAt(profile, now)
+	local carried = profile.carried.orbs
+
+	-- How to get Cash when a shop step can't be afforded yet.
+	local function earn(goal: string): (string, string)
+		if carried >= 1 then
+			return "Sell your Cursed Orbs at the Sell Stand to afford " .. goal .. ".", "Sell"
+		elseif boxOrbs >= 1 then
+			return "Collect your Orb Box, then Sell it, to afford " .. goal .. ".", "Box"
+		elseif not placed then
+			return "Place a Sorcerer on a slot so it makes Cursed Orbs.", "Slot"
+		end
+		return "Your Sorcerers are filling the Orb Box. Collect and Sell it to afford " .. goal .. ".", "Box"
+	end
+
+	if step.event == "placeCrate" then
+		if onPad then
+			return "Your crate is opening. Wait for its Opening Time, then press Open.", "Pad"
+		elseif unplaced == 0 then
+			return earn("a Basic Crate at the Crate Shop")
+		end
+		return step.text, step.target
+	elseif step.event == "openCrate" then
+		if onPad then
+			local remaining = onPad.readyAt - now
+			if remaining > 0 then
+				return string.format(
+					"Opening Time: %d:%02d. When it's ready, press Open on the crate.",
+					math.ceil(remaining) // 60,
+					math.ceil(remaining) % 60
+				),
+					"Pad"
+			end
+			return "Your crate is ready! Walk up to it and press Open.", "Pad"
+		elseif unplaced > 0 then
+			return "Your crate is back in your inventory. Place it on a Crate Pad again; its Opening Time carries on.",
+				"Pad"
+		end
+		return step.text, step.target
+	elseif step.event == "placeSorcerer" then
+		return step.text, step.target
+	elseif step.event == "collect" then
+		if boxOrbs >= 1 then
+			return step.text, "Box"
+		elseif not placed then
+			return "Place a Sorcerer on a slot so it can make Cursed Orbs.", "Slot"
+		end
+		return "Watch your Sorcerer make Cursed Orbs. They roll down the lane into your Orb Box.", "Box"
+	elseif step.event == "sell" then
+		if carried >= 1 then
+			return step.text, "Sell"
+		elseif boxOrbs >= 1 then
+			return "Collect your Orb Box first, then carry it to the Sell Stand.", "Box"
+		elseif not placed then
+			return "Place a Sorcerer on a slot so it can make Cursed Orbs.", "Slot"
+		end
+		return "Wait for your Orb Box to fill a little, then Collect it.", "Box"
+	elseif step.event == "buyCrate" then
+		local price = (Crates.get("basic") :: any).price
+		if profile.cash < price then
+			return earn("a Basic Crate (" .. price .. " Cash)")
+		end
+		return step.text, step.target
+	elseif step.event == "upgrade" then
+		local cost = Economy.upgradeCost("orbValue", Economy.upgradeLevel(profile, "orbValue")) or 0
+		if profile.cash < cost then
+			return earn("Orb Value (" .. cost .. " Cash)")
+		end
+		return step.text, step.target
+	end
+	return step.text, step.target
+end
+
 return Tutorial

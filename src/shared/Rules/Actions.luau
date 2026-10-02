@@ -133,7 +133,11 @@ function Actions.placeCrate(profile: any, cid: any, pad: any, now: number): (boo
 	if Actions.crateOnPad(profile, pad) then
 		return false, "There's already a Crate on that pad."
 	end
-	local duration = crate.remaining or Economy.openingTime(crate.tier, profile)
+	-- `remaining` is set once a crate has been placed before (0 = already finished opening);
+	-- nil means it has never been placed and gets its full Opening Time.
+	local duration = if crate.remaining ~= nil
+		then crate.remaining
+		else Economy.openingTime(crate.tier, profile)
 	crate.pad = pad
 	crate.readyAt = now + duration
 	crate.remaining = nil
@@ -148,11 +152,11 @@ function Actions.pickUpCrate(profile: any, pad: any, now: number): (boolean, any
 	if not cid or not crate then
 		return false, "There's no Crate on that pad."
 	end
-	-- Keep the time already spent opening; placing it again continues from there.
-	local remaining = math.max(0, crate.readyAt - now)
+	-- Keep the time already spent opening; placing it again continues from there. A crate
+	-- that already finished keeps remaining = 0 and can be opened as soon as it's placed.
+	crate.remaining = math.max(0, crate.readyAt - now)
 	crate.pad = nil
 	crate.readyAt = nil
-	crate.remaining = if remaining > 0 then remaining else nil
 	return true, { cid = cid, tier = crate.tier, pad = pad }
 end
 

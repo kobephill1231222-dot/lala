@@ -165,7 +165,7 @@ end
 
 -- Full sync of one farm with its owner's profile. Only rebuilds what changed.
 local function renderFarm(farm: Farm)
-	local session = farm.owner and services.DataService.getSession(farm.owner)
+	local session = farm.owner and services.DataService.peekSession(farm.owner)
 	local profile = session and session.profile
 	local slotsFolder = farm.model:FindFirstChild("Slots")
 	local padsFolder = farm.model:FindFirstChild("Pads")
@@ -366,7 +366,7 @@ end
 
 -- Cheap per-state-change update: Orb Box numbers and the carried box.
 function FarmService.sync(player: Player)
-	local session = services.DataService.getSession(player)
+	local session = services.DataService.peekSession(player)
 	if not session then
 		return
 	end
@@ -400,7 +400,7 @@ end
 
 local function applyCharacter(player: Player, character: Model)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local session = services.DataService.getSession(player)
+	local session = services.DataService.peekSession(player)
 	if humanoid and session then
 		humanoid.WalkSpeed = Economy.walkSpeed(session.profile)
 	end

@@ -106,6 +106,12 @@ end)
 roblox.implementMethod("Player", "GetMouse", function()
 	return { Hit = roblox.CFrame.new(0, 0, -50) }
 end)
+roblox.implementMethod("Camera", "ScreenPointToRay", function()
+	return { Origin = roblox.Vector3.new(0, 50, 0), Direction = roblox.Vector3.new(0, -1, 0) }
+end)
+roblox.implementMethod("UserInputService", "GetMouseLocation", function()
+	return roblox.Vector2.new(640, 360)
+end)
 roblox.implementMethod("Camera", "ViewportPointToRay", function()
 	return { Origin = roblox.Vector3.new(0, 50, 0), Direction = roblox.Vector3.new(0, -1, 0) }
 end)
@@ -327,6 +333,53 @@ step("HUD shows Cash, income and the Orb Box", function()
 	local count = gui:FindFirstChild("OrbBoxCard", true):FindFirstChild("Count")
 	assert(count and string.find(count.Text, "/ 60"), "box label: " .. tostring(count and count.Text))
 end)
+step("HUD navigation stays on screen at every size", function()
+	local gui = playerGui.JJKFarmUI
+	local hud = gui.HUD
+	assert(hud:FindFirstChildOfClass("UIScale") == nil, "the full-screen HUD container must not be scaled")
+	local menu = hud.Menu
+	assert(menu.AnchorPoint == roblox.Vector2.new(1, 0.5), "menu must anchor to the right edge")
+	assert(menu.Position.X.Scale == 1 and menu.Position.X.Offset < 0, "menu must sit inside the right edge")
+	local sizes = {
+		{ 1558, 717 }, -- the reviewer's Studio viewport (minus top bar)
+		{ 1920, 1044 },
+		{ 1280, 684 },
+		{ 1024, 600 },
+		{ 812, 339 }, -- landscape phone, safe area
+		{ 390, 760 }, -- portrait phone
+		{ 2560, 1404 },
+	}
+	for _, wh in sizes do
+		local w, h = wh[1], wh[2]
+		local s = UIController._hudScaleFor(roblox.Vector2.new(w, h), false)
+		local st = UIController._hudScaleFor(roblox.Vector2.new(w, h), true)
+		for _, scale in { s, st } do
+			local menuW, menuH = menu.Size.X.Offset * scale, menu.Size.Y.Offset * scale
+			local statsW = hud.Stats.Size.X.Offset * scale
+			local left = w - 12 - menuW
+			assert(left >= 0 and w - 12 <= w, string.format("%dx%d: menu leaves the screen", w, h))
+			assert(
+				menuH <= h - 24 + 1e-6,
+				string.format("%dx%d: menu taller than the screen (%.0f)", w, h, menuH)
+			)
+			assert(12 + statsW <= left + 1e-6, string.format("%dx%d: stats overlap the menu", w, h))
+		end
+	end
+	-- The menu's children add up to the height the layout reserves.
+	local total = 0
+	local count = 0
+	for _, child in menu:GetChildren() do
+		if child:IsA("GuiObject") then
+			total += child.Size.Y.Offset
+			count += 1
+		end
+	end
+	total += (count - 1) * 8
+	assert(
+		total <= menu.Size.Y.Offset,
+		"menu buttons need " .. total .. "px, frame has " .. menu.Size.Y.Offset
+	)
+end)
 step("Your Farm prompts created (pads, slots, Orb Box)", function()
 	task.wait(0.2)
 	frames(3)
@@ -405,7 +458,7 @@ step("all panel buttons can be activated", function()
 		UIController.open(panel)
 		task.wait(0.05)
 		local buttons, last = {}, {}
-		for _, root in playerGui.JJKFarmUI.Panels:GetChildren() do
+		for _, root in playerGui.JJKFarmUI.Panels.PanelScroller:GetChildren() do
 			if root.Name == "Panel" and root.Visible then
 				for _, d in root:GetDescendants() do
 					if d:IsA("TextButton") and d.Name == "Button" then

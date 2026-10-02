@@ -466,7 +466,7 @@ local function scenario()
 	cloud.data["u_3003"] = { data = { cash = 999999, units = { ["1"] = { id = "yoru", level = 30 } } } }
 	cloud.failNext = 1000
 	EngineShim.addPlayer(game, "Carol", 3003)
-	task.wait(24) -- retries with backoff (~21s)
+	task.wait(32) -- 6 attempts with backoff (~30 s)
 	cloud.failNext = 0
 	local kicked = false
 	for _, k in state.kicked do
@@ -479,6 +479,96 @@ local function scenario()
 		"stored data untouched",
 		cloud.data["u_3003"].data.cash == 999999 and cloud.data["u_3003"].lock == nil
 	)
+
+	local function kickedWith(name)
+		for _, k in state.kicked do
+			if k.player == name then
+				return k.message
+			end
+		end
+		return nil
+	end
+
+	print("Unreadable saves are refused, never reset")
+	cloud.data["u_4004"] = { data = { cash = 500, units = "abc" } }
+	EngineShim.addPlayer(game, "Dave", 4004)
+	task.wait(0.5)
+	check("player with a malformed save is kicked", kickedWith("Dave") ~= nil, kickedWith("Dave"))
+	check(
+		"malformed save left untouched and unlocked",
+		cloud.data["u_4004"].data.cash == 500
+			and cloud.data["u_4004"].data.units == "abc"
+			and cloud.data["u_4004"].lock == nil
+	)
+	check(
+		"malformed save marked for recovery",
+		cloud.data["u_4004"].meta and cloud.data["u_4004"].meta.quarantine ~= nil
+	)
+	cloud.data["u_5005"] = { data = { version = 99, cash = 77 } }
+	EngineShim.addPlayer(game, "Erin", 5005)
+	task.wait(0.5)
+	check("save from a newer version is refused", kickedWith("Erin") ~= nil, kickedWith("Erin"))
+	check(
+		"newer save untouched and unlocked",
+		cloud.data["u_5005"].data.version == 99 and cloud.data["u_5005"].lock == nil
+	)
+
+	print("A live lease on another server is never taken")
+	cloud.data["u_6006"] = { data = { cash = 10 }, lock = { job = "other-server", t = os.time() } }
+	EngineShim.addPlayer(game, "Finn", 6006)
+	task.wait(17) -- 6 attempts, 3 s apart
+	check("player is asked to rejoin", kickedWith("Finn") ~= nil, kickedWith("Finn"))
+	check(
+		"the other server keeps its lease and data",
+		cloud.data["u_6006"].lock.job == "other-server" and cloud.data["u_6006"].data.cash == 10
+	)
+
+	print("Changes pause before the lease could lapse")
+	local realClock = DataService.clock
+	DataService.clock = function()
+		return realClock() + GameConfig.SessionLockStaleSeconds
+	end
+	local paused = request(bob, "GetState")
+	check(
+		"requests refused while saves can't renew the lease",
+		paused.ok == false and string.find(paused.message or "", "paused") ~= nil,
+		paused.message
+	)
+	DataService.clock = realClock
+	check("requests accepted again once the lease is fresh", request(bob, "GetState").ok == true)
+
+	print("Touch pads are range-checked on the server")
+	teleport(bob, farmPoint(2, Layout.CollectPoint))
+	state.now += 10
+	local bobCash = DataService.getSession(bob).profile.cash
+	DataService.getSession(bob).profile.carried = { orbs = 10, value = 20 }
+	task.wait(1.1)
+	sellPad.Touched:FireSync(bob.Character.PrimaryPart)
+	check(
+		"a Sell Stand touch from far away doesn't sell",
+		DataService.getSession(bob).profile.carried.orbs == 10
+	)
+	teleport(bob, Layout.SellStand)
+	task.wait(1.1)
+	sellPad.Touched:FireSync(bob.Character.PrimaryPart)
+	check("a touch at the Sell Stand sells", DataService.getSession(bob).profile.cash == bobCash + 20)
+	bob.Character.Humanoid.Health = 0
+	DataService.getSession(bob).profile.carried = { orbs = 5, value = 10 }
+	task.wait(1.1)
+	sellPad.Touched:FireSync(bob.Character.PrimaryPart)
+	check("a dead character can't sell", DataService.getSession(bob).profile.carried.orbs == 5)
+	bob.Character.Humanoid.Health = 100
+
+	print("Handoff: another server asks for a profile this server holds")
+	DataService._onReleaseRequest({ Data = { key = "u_2002", holder = game.JobId } })
+	task.wait(0.3)
+	check(
+		"holder saves and releases at once",
+		cloud.data["u_2002"].lock == nil and cloud.data["u_2002"].data ~= nil
+	)
+	check("player here is disconnected first", kickedWith("Bob") ~= nil)
+	DataService._onReleaseRequest({ Data = { key = "u_1001", holder = "some-other-job" } })
+	check("requests for other servers are ignored", DataService.getSession(alice3) ~= nil)
 
 	print("Shutdown saves everyone")
 	for _, fn in state.bindToClose do
