@@ -31,7 +31,11 @@ return function(ctx)
 			local raw = {
 				energy = 0 / 0,
 				seals = -5,
-				units = { ["4"] = { id = "suzu", level = 999 }, ["5"] = { id = "deleted_char", level = 3 }, ["6"] = "junk" },
+				units = {
+					["4"] = { id = "suzu", level = 999 },
+					["5"] = { id = "deleted_char", level = 3 },
+					["6"] = "junk",
+				},
 				nextUid = 2,
 				spots = { ["1"] = "4", ["2"] = "5", ["9"] = "4", ["3"] = "missing" },
 				unlockedSpots = 50,
@@ -109,7 +113,9 @@ return function(ctx)
 			expect(Economy.wellCapacity(p)).toBe(GameConfig.WellMinCapacity)
 			p.spots["1"] = "1"
 			p.upgrades.capacity = 2
-			expect(Economy.wellCapacity(p)).toBe(GameConfig.WellBaseSeconds + 2 * GameConfig.WellSecondsPerLevel)
+			expect(Economy.wellCapacity(p)).toBe(
+				GameConfig.WellBaseSeconds + 2 * GameConfig.WellSecondsPerLevel
+			)
 		end)
 
 		it("prices upgrades and stops at max level", function()
@@ -201,7 +207,11 @@ return function(ctx)
 			p.energy = 1e12
 			p.stats.summons = 10
 			p.pity = Banners.PityThreshold - 1
-			local rng = { NextNumber = function() return 0 end } -- would always roll Common
+			local rng = {
+				NextNumber = function()
+					return 0
+				end,
+			} -- would always roll Common
 			local ok, res = Actions.summon(p, "lantern", 1, rng, T0)
 			expect(ok).toBe(true)
 			expect(res.units[1].rarity == "Legendary" or res.units[1].rarity == "Mythic").toBe(true)
@@ -325,7 +335,9 @@ return function(ctx)
 			for _, banner in Banners.List do
 				for rarity, w in banner.weights do
 					if w > 0 then
-						expect(Characters.ByRarity[rarity] ~= nil and #Characters.ByRarity[rarity] > 0).toBe(true)
+						expect(Characters.ByRarity[rarity] ~= nil and #Characters.ByRarity[rarity] > 0).toBe(
+							true
+						)
 					end
 				end
 			end

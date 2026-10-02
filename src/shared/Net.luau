@@ -31,12 +31,13 @@ function Net.createServer(): Remotes
 		folder.Parent = ReplicatedStorage
 	end
 	local remotes = {}
-	for name, className in DEFINITIONS do
+	for name: string, className: string in DEFINITIONS :: { [string]: string } do
 		local remote = folder:FindFirstChild(name)
 		if not remote then
-			remote = Instance.new(className)
-			remote.Name = name
-			remote.Parent = folder
+			local created = Instance.new(className)
+			created.Name = name
+			created.Parent = folder
+			remote = created
 		end
 		remotes[name] = remote
 	end

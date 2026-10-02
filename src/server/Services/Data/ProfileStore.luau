@@ -71,14 +71,21 @@ function ProfileStore.load(self: ProfileStore, key: string): (string, any)
 		end
 		lastReason = reason
 		if attempt < opts.retries then
-			opts.wait(opts.retryDelay * (if status == "error" then attempt else 1))
+			-- Mild backoff on errors; total wait stays around 20s so players aren't stuck loading.
+			opts.wait(opts.retryDelay * (if status == "error" then 1 + (attempt - 1) * 0.5 else 1))
 		end
 	end
 	return "error", lastReason
 end
 
 -- Writes `data`. Returns "ok", "lost" (another server owns the session) or "error".
-function ProfileStore.save(self: ProfileStore, key: string, data: any, release: boolean, retries: number?): (string, string?)
+function ProfileStore.save(
+	self: ProfileStore,
+	key: string,
+	data: any,
+	release: boolean,
+	retries: number?
+): (string, string?)
 	local opts = self.options
 	local lastReason = "unknown"
 	for attempt = 1, retries or 3 do

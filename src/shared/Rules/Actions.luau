@@ -12,7 +12,8 @@ local Rarities = require(Config.Rarities)
 local Upgrades = require(Config.Upgrades)
 local Economy = require(script.Parent.Economy)
 
-type Rng = { NextNumber: (self: any) -> number }
+-- Anything with Random's NextNumber() (Roblox Random, or Util/Prng in tests).
+type Rng = any
 
 local Actions = {}
 
@@ -101,11 +102,13 @@ function Actions.summon(profile: any, bannerId: any, count: any, rng: Rng, now: 
 		return false, "Invalid summon amount."
 	end
 	if countUnits(profile) + count > GameConfig.InventoryLimit then
-		return false, string.format("Your roster is full (%d). Release some units first.", GameConfig.InventoryLimit)
+		return false,
+			string.format("Your roster is full (%d). Release some units first.", GameConfig.InventoryLimit)
 	end
 	local cost = banner.cost * count
 	if not spend(profile, banner.currency, cost) then
-		return false, if banner.currency == "seals" then "Not enough Curse Seals." else "Not enough cursed energy."
+		return false,
+			if banner.currency == "seals" then "Not enough Curse Seals." else "Not enough cursed energy."
 	end
 
 	local weights = Economy.rarityWeights(banner.id, 0)
@@ -170,7 +173,8 @@ function Actions.place(profile: any, uid: any, spot: any, now: number): (boolean
 		profile.spots[tostring(from)] = replaced
 	end
 	profile.spots[key] = uid
-	return true, { spot = target, from = from, replaced = replaced, swapped = from ~= nil and replaced ~= nil }
+	return true,
+		{ spot = target, from = from, replaced = replaced, swapped = from ~= nil and replaced ~= nil }
 end
 
 function Actions.unplace(profile: any, spot: any, now: number): (boolean, any)

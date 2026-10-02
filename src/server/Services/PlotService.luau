@@ -195,7 +195,8 @@ local function applySpot(plot: Plot, spot: SpotState, state: string, uid: string
 			local label = root and root:FindFirstChild("UnitLabel")
 			local levelText = label and label:FindFirstChild("Level")
 			if levelText and levelText:IsA("TextLabel") then
-				levelText.Text = string.format("Lv %d  -  %s", unitData.level, (Characters.get(unitData.id) :: any).rarity)
+				levelText.Text =
+					string.format("Lv %d  -  %s", unitData.level, (Characters.get(unitData.id) :: any).rarity)
 			end
 		end
 	end
@@ -256,11 +257,12 @@ local function onWellTouched(plot: Plot, hit: BasePart)
 end
 
 local function loadPlot(index: number, model: Model): Plot
-	local units = model:FindFirstChild("Units") :: Folder?
+	local units = model:FindFirstChild("Units")
 	if not units then
-		units = Instance.new("Folder")
-		units.Name = "Units"
-		units.Parent = model
+		local folder = Instance.new("Folder")
+		folder.Name = "Units"
+		folder.Parent = model
+		units = folder
 	end
 	local plot: Plot = {
 		index = index,
@@ -274,13 +276,14 @@ local function loadPlot(index: number, model: Model): Plot
 	local well = model:WaitForChild("Well")
 	local core = well:WaitForChild("Core") :: BasePart
 	plot.wellCore = core
-	local attachment = core:FindFirstChild("BeamTarget") :: Attachment?
+	local attachment = core:FindFirstChild("BeamTarget")
 	if not attachment then
-		attachment = Instance.new("Attachment")
-		attachment.Name = "BeamTarget"
-		attachment.Parent = core
+		local created = Instance.new("Attachment")
+		created.Name = "BeamTarget"
+		created.Parent = core
+		attachment = created
 	end
-	plot.wellAttachment = attachment
+	plot.wellAttachment = attachment :: Attachment
 
 	local spotsFolder = model:WaitForChild("Spots")
 	for i = 1, GameConfig.SpotCount do

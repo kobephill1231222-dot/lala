@@ -74,7 +74,13 @@ local function fightersInForest(): { Fighter }
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if root and root:IsA("BasePart") and humanoid and humanoid.Health > 0 and inZoneWithMargin(root.Position) then
+		if
+			root
+			and root:IsA("BasePart")
+			and humanoid
+			and humanoid.Health > 0
+			and inZoneWithMargin(root.Position)
+		then
 			table.insert(list, { player = player, root = root, humanoid = humanoid })
 		end
 	end
@@ -184,7 +190,10 @@ local function think(enemy: Enemy, fighters: { Fighter }, t: number)
 			enemy.nextAttack = t + def.attackCooldown
 			local target = enemy.attackTarget
 			local targetRoot = target and target.Parent and target.Parent:FindFirstChild("HumanoidRootPart")
-			services.Remotes.Effect:FireAllClients("CurseStrike", { position = position, radius = def.attackRange, enemy = def.id })
+			services.Remotes.Effect:FireAllClients(
+				"CurseStrike",
+				{ position = position, radius = def.attackRange, enemy = def.id }
+			)
 			if target and targetRoot and targetRoot:IsA("BasePart") and target.Health > 0 then
 				if (targetRoot.Position - position).Magnitude <= def.attackRange + 3 then
 					target:TakeDamage(def.damage)
@@ -235,7 +244,11 @@ local function rewardContributors(enemy: Enemy, killer: Player)
 				local seals = if rng:NextNumber() < def.sealChance then def.sealAmount else 0
 				Actions.grantReward(session.profile, energy, seals)
 				session.profile.stats.kills += 1
-				services.Remotes.Notify:FireClient(player, "Kill", { name = def.name, energy = energy, seals = seals })
+				services.Remotes.Notify:FireClient(
+					player,
+					"Kill",
+					{ name = def.name, energy = energy, seals = seals }
+				)
 				services.GameService.tutorialEvent(player, session, "kill")
 				services.StateService.markDirty(player)
 			end
@@ -248,7 +261,10 @@ local function killEnemy(enemy: Enemy, killer: Player)
 	enemy.model:SetAttribute("Dead", true)
 	enemy.model:SetAttribute("Telegraph", false)
 	enemy.humanoid:MoveTo(enemy.root.Position)
-	services.Remotes.Effect:FireAllClients("CurseDeath", { position = enemy.root.Position, enemy = enemy.def.id })
+	services.Remotes.Effect:FireAllClients(
+		"CurseDeath",
+		{ position = enemy.root.Position, enemy = enemy.def.id }
+	)
 	rewardContributors(enemy, killer)
 	nextSpawn[enemy.def.id] = math.max(nextSpawn[enemy.def.id] or 0, os.clock() + enemy.def.respawnDelay)
 	local model = enemy.model
@@ -303,7 +319,17 @@ local function onAbility(player: Player, abilityId: any, aimInput: any)
 		for _, enemy in enemies do
 			if enemy.state ~= "dead" then
 				local radius = 2 * enemy.def.scale
-				if CombatMath.hits(ability.shape, origin, aim, ability.range, ability.width, enemy.root.Position, radius) then
+				if
+					CombatMath.hits(
+						ability.shape,
+						origin,
+						aim,
+						ability.range,
+						ability.width,
+						enemy.root.Position,
+						radius
+					)
+				then
 					local dealt = math.min(damage, enemy.health)
 					enemy.health -= dealt
 					enemy.contributions[player] = (enemy.contributions[player] or 0) + dealt
@@ -318,7 +344,18 @@ local function onAbility(player: Player, abilityId: any, aimInput: any)
 	else
 		for _, dummy in dummies do
 			local primary = dummy.PrimaryPart
-			if primary and CombatMath.hits(ability.shape, origin, aim, ability.range, ability.width, primary.Position, 2) then
+			if
+				primary
+				and CombatMath.hits(
+					ability.shape,
+					origin,
+					aim,
+					ability.range,
+					ability.width,
+					primary.Position,
+					2
+				)
+			then
 				table.insert(hits, { position = primary.Position, damage = damage, dummy = dummy.Name })
 			end
 		end

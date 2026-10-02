@@ -55,7 +55,8 @@ Layout.PlotAngles = { 45, 115, 150, 210, 245, 315 }
 
 function Layout.plotCFrame(index: number): CFrame
 	local angle = math.rad(Layout.PlotAngles[index])
-	local center = Vector3.new(Layout.PlotRadius * math.sin(angle), Layout.PlotY, -Layout.PlotRadius * math.cos(angle))
+	local center =
+		Vector3.new(Layout.PlotRadius * math.sin(angle), Layout.PlotY, -Layout.PlotRadius * math.cos(angle))
 	-- Local -Z (LookVector) faces the village centre: that's the sanctuary's front gate.
 	return CFrame.lookAt(center, Vector3.new(0, Layout.PlotY, 0))
 end

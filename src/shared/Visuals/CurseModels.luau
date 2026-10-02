@@ -25,7 +25,15 @@ end
 
 type Ctx = { model: Model, root: BasePart, scale: number }
 
-local function add(ctx: Ctx, shape: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material?, extra: { [string]: any }?): BasePart
+local function add(
+	ctx: Ctx,
+	shape: string,
+	size: Vector3,
+	cf: CFrame,
+	color: Color3,
+	material: Enum.Material?,
+	extra: { [string]: any }?
+): BasePart
 	local s = ctx.scale
 	local scaled = CFrame.new(cf.Position * s) * cf.Rotation
 	local props: { [string]: any } = {
@@ -67,7 +75,15 @@ BUILDERS.gloomling = function(ctx)
 	add(ctx, "ellipsoid", V3(2.6, 2.1, 2.5), L(0, 0.2, 0), VOID)
 	add(ctx, "ellipsoid", V3(2.0, 1.2, 2.0), L(0, 0.75, 0.2), BRUISE)
 	-- A cluster of mismatched eyes
-	for i, p in { V3(-0.55, 0.65, -1.05), V3(0.5, 0.75, -1.0), V3(0.05, 1.05, -0.85), V3(-0.9, 0.25, -0.85), V3(0.95, 0.2, -0.8) } do
+	for i, p in
+		{
+			V3(-0.55, 0.65, -1.05),
+			V3(0.5, 0.75, -1.0),
+			V3(0.05, 1.05, -0.85),
+			V3(-0.9, 0.25, -0.85),
+			V3(0.95, 0.2, -0.8),
+		}
+	do
 		local size = if i <= 2 then 0.5 else 0.3
 		add(ctx, "ball", V3(size, size, size), CFrame.new(p), if i == 3 then SICK else GLOW, NEON)
 	end
@@ -79,7 +95,13 @@ BUILDERS.gloomling = function(ctx)
 	-- Dripping tendrils
 	for i = 0, 4 do
 		local a = rad(i * 72)
-		add(ctx, "wedge", V3(0.45, 1.3, 0.45), L(math.cos(a) * 0.8, -1.2, math.sin(a) * 0.8, 180, i * 72, 0), VOID)
+		add(
+			ctx,
+			"wedge",
+			V3(0.45, 1.3, 0.45),
+			L(math.cos(a) * 0.8, -1.2, math.sin(a) * 0.8, 180, i * 72, 0),
+			VOID
+		)
 	end
 end
 
@@ -87,12 +109,24 @@ BUILDERS.wailer = function(ctx)
 	-- Robe tapering into smoke
 	add(ctx, "ellipsoid", V3(2.2, 3.4, 1.8), L(0, -0.6, 0.1), Color3.fromRGB(34, 28, 44))
 	for i = 0, 5 do
-		add(ctx, "wedge", V3(0.9, 1.8, 0.4), CFrame.Angles(0, rad(i * 60), 0) * L(0, -2.4, 0.7, 180 - 10, 0, 0), Color3.fromRGB(28, 22, 36))
+		add(
+			ctx,
+			"wedge",
+			V3(0.9, 1.8, 0.4),
+			CFrame.Angles(0, rad(i * 60), 0) * L(0, -2.4, 0.7, 180 - 10, 0, 0),
+			Color3.fromRGB(28, 22, 36)
+		)
 	end
 	-- Long hanging hair
 	for i = 0, 6 do
 		local x = -0.9 + i * 0.3
-		add(ctx, "block", V3(0.28, 2.6 + (i % 3) * 0.4, 0.28), L(x, 0.7, 0.55 + math.abs(x) * 0.1), Color3.fromRGB(12, 10, 16))
+		add(
+			ctx,
+			"block",
+			V3(0.28, 2.6 + (i % 3) * 0.4, 0.28),
+			L(x, 0.7, 0.55 + math.abs(x) * 0.1),
+			Color3.fromRGB(12, 10, 16)
+		)
 	end
 	add(ctx, "ball", V3(1.9, 1.9, 1.9), L(0, 1.8, 0.2), Color3.fromRGB(12, 10, 16))
 	-- Cracked mask with an open, wailing mouth
@@ -100,11 +134,23 @@ BUILDERS.wailer = function(ctx)
 	add(ctx, "ellipsoid", V3(0.55, 0.75, 0.2), L(0, 1.05, -0.98), Color3.fromRGB(10, 6, 12))
 	for _, side in { -1, 1 } do
 		add(ctx, "ellipsoid", V3(0.36, 0.22, 0.15), L(side * 0.35, 2.0, -0.98), BLOOD, NEON)
-		add(ctx, "block", V3(0.06, 0.8, 0.06), L(side * 0.42, 1.55, -1.0, 0, 0, side * 15), Color3.fromRGB(60, 40, 50))
+		add(
+			ctx,
+			"block",
+			V3(0.06, 0.8, 0.06),
+			L(side * 0.42, 1.55, -1.0, 0, 0, side * 15),
+			Color3.fromRGB(60, 40, 50)
+		)
 		-- Long, bony arms
 		add(ctx, "block", V3(0.35, 2.4, 0.35), L(side * 1.35, 0.1, -0.3, 20, 0, side * 22), BONE)
 		for f = -1, 1 do
-			add(ctx, "wedge", V3(0.12, 0.6, 0.12), L(side * 1.85 + f * 0.12, -1.15, -0.7, 200, 0, side * 10), BONE)
+			add(
+				ctx,
+				"wedge",
+				V3(0.12, 0.6, 0.12),
+				L(side * 1.85 + f * 0.12, -1.15, -0.7, 200, 0, side * 10),
+				BONE
+			)
 		end
 	end
 end
@@ -117,19 +163,47 @@ BUILDERS.brute = function(ctx)
 	add(ctx, "ball", V3(1.25, 1.25, 1.25), L(0, 0.55, -1.15), Color3.fromRGB(6, 2, 10))
 	for i = 0, 7 do
 		local a = rad(i * 45)
-		add(ctx, "block", V3(0.38, 0.14, 0.14), L(math.cos(a) * 0.7, 0.55 + math.sin(a) * 0.7, -1.28, 0, 0, i * 45 + 90), GLOW, NEON)
+		add(
+			ctx,
+			"block",
+			V3(0.38, 0.14, 0.14),
+			L(math.cos(a) * 0.7, 0.55 + math.sin(a) * 0.7, -1.28, 0, 0, i * 45 + 90),
+			GLOW,
+			NEON
+		)
 	end
 	-- Small head, one huge eye, horns
 	add(ctx, "ball", V3(1.4, 1.4, 1.4), L(0, 2.1, -0.95), hide, Enum.Material.Basalt)
 	add(ctx, "ellipsoid", V3(0.75, 0.55, 0.2), L(0, 2.15, -1.6), SICK, NEON)
 	add(ctx, "ball", V3(0.28, 0.28, 0.28), L(0, 2.15, -1.7), VOID)
 	for _, side in { -1, 1 } do
-		add(ctx, "wedge", V3(0.35, 1.2, 0.4), L(side * 0.5, 2.95, -0.9, -15, 0, side * -25), BONE, Enum.Material.Marble)
+		add(
+			ctx,
+			"wedge",
+			V3(0.35, 1.2, 0.4),
+			L(side * 0.5, 2.95, -0.9, -15, 0, side * -25),
+			BONE,
+			Enum.Material.Marble
+		)
 		-- Huge arms dragging claws
-		add(ctx, "ellipsoid", V3(1.2, 2.7, 1.2), L(side * 2.2, 0.2, -0.4, 10, 0, side * 10), hide, Enum.Material.Basalt)
+		add(
+			ctx,
+			"ellipsoid",
+			V3(1.2, 2.7, 1.2),
+			L(side * 2.2, 0.2, -0.4, 10, 0, side * 10),
+			hide,
+			Enum.Material.Basalt
+		)
 		add(ctx, "ellipsoid", V3(1.5, 1.2, 1.5), L(side * 2.45, -1.4, -0.7), hide, Enum.Material.Basalt)
 		for f = -1, 1 do
-			add(ctx, "wedge", V3(0.25, 0.9, 0.3), L(side * 2.45 + f * 0.4, -2.2, -1.2, 200, 0, 0), BONE, Enum.Material.Marble)
+			add(
+				ctx,
+				"wedge",
+				V3(0.25, 0.9, 0.3),
+				L(side * 2.45 + f * 0.4, -2.2, -1.2, 200, 0, 0),
+				BONE,
+				Enum.Material.Marble
+			)
 		end
 		add(ctx, "ellipsoid", V3(1.1, 1.6, 1.1), L(side * 0.9, -1.6, 0.4), hide, Enum.Material.Basalt)
 		add(ctx, "block", V3(0.12, 1.6, 0.12), L(side * 1.2, 0.9, -1.2, 0, 0, side * 30), GLOW, NEON)

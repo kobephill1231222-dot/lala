@@ -23,7 +23,9 @@ function Export.collect(root, out)
 	table.insert(nodes, root)
 	for _, inst in nodes do
 		if inst:IsA("BasePart") then
-			local transparency = safe(function() return inst.Transparency end, 0)
+			local transparency = safe(function()
+				return inst.Transparency
+			end, 0)
 			if transparency < 0.98 and inst.Name ~= "Terrain" then
 				local shape = "b"
 				if inst:IsA("WedgePart") then
@@ -31,12 +33,16 @@ function Export.collect(root, out)
 				elseif inst:IsA("CornerWedgePart") then
 					shape = "cw"
 				elseif inst:IsA("Part") then
-					local s = safe(function() return inst.Shape.Name end, "Block")
+					local s = safe(function()
+						return inst.Shape.Name
+					end, "Block")
 					shape = SHAPES[s] or "b"
 				end
 				if shape == "b" then
 					local mesh = inst:FindFirstChildOfClass("SpecialMesh")
-					if mesh and safe(function() return mesh.MeshType.Name end, "") == "Sphere" then
+					if mesh and safe(function()
+						return mesh.MeshType.Name
+					end, "") == "Sphere" then
 						shape = "e"
 					end
 				end
@@ -45,10 +51,26 @@ function Export.collect(root, out)
 				table.insert(out.parts, {
 					k = shape,
 					p = { round(x), round(y), round(z) },
-					r = { round(r00), round(r01), round(r02), round(r10), round(r11), round(r12), round(r20), round(r21), round(r22) },
+					r = {
+						round(r00),
+						round(r01),
+						round(r02),
+						round(r10),
+						round(r11),
+						round(r12),
+						round(r20),
+						round(r21),
+						round(r22),
+					},
 					z = { round(size.X), round(size.Y), round(size.Z) },
-					c = { math.floor(color.R * 255 + 0.5), math.floor(color.G * 255 + 0.5), math.floor(color.B * 255 + 0.5) },
-					m = safe(function() return inst.Material.Name end, "Plastic"),
+					c = {
+						math.floor(color.R * 255 + 0.5),
+						math.floor(color.G * 255 + 0.5),
+						math.floor(color.B * 255 + 0.5),
+					},
+					m = safe(function()
+						return inst.Material.Name
+					end, "Plastic"),
 					t = round(transparency),
 				})
 			end
@@ -60,8 +82,12 @@ function Export.collect(root, out)
 				table.insert(out.lights, {
 					p = { round(p.X), round(p.Y), round(p.Z) },
 					c = { math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255) },
-					range = safe(function() return inst.Range end, 8),
-					b = safe(function() return inst.Brightness end, 1),
+					range = safe(function()
+						return inst.Range
+					end, 8),
+					b = safe(function()
+						return inst.Brightness
+					end, 1),
 				})
 			end
 		end

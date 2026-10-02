@@ -286,7 +286,11 @@ function GameService.start()
 		local plot = services.PlotService.assign(player)
 		session.plot = plot
 		if not plot then
-			notify(player, "Toast", { text = "All sanctuaries are taken on this server. Try another server!", tone = "bad" })
+			notify(
+				player,
+				"Toast",
+				{ text = "All sanctuaries are taken on this server. Try another server!", tone = "bad" }
+			)
 		end
 		services.PlotService.render(player)
 		services.StateService.pushNow(player)

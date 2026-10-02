@@ -49,7 +49,14 @@ for _, district in map:GetChildren() do
 	totalLights += lights
 	print(string.format("  %-14s %5d parts  %3d lights", district.Name, parts, lights))
 end
-print(string.format("TOTAL %d parts, %d point lights, %d particle emitters", totalParts, totalLights, totalEmitters))
+print(
+	string.format(
+		"TOTAL %d parts, %d point lights, %d particle emitters",
+		totalParts,
+		totalLights,
+		totalEmitters
+	)
+)
 
 -- Sanity checks that services rely on
 local function require_(cond, msg)
@@ -60,17 +67,33 @@ end
 local sanctuaries = map:FindFirstChild("Sanctuaries")
 require_(sanctuaries and #sanctuaries:GetChildren() == 6, "six sanctuaries")
 for _, s in sanctuaries:GetChildren() do
-	require_(s:FindFirstChild("Well") and s.Well:FindFirstChild("Core") and s.Well:FindFirstChild("Sensor"), s.Name .. " well")
+	require_(
+		s:FindFirstChild("Well") and s.Well:FindFirstChild("Core") and s.Well:FindFirstChild("Sensor"),
+		s.Name .. " well"
+	)
 	require_(s:FindFirstChild("Spots") and #s.Spots:GetChildren() == 10, s.Name .. " spots")
 	for _, spot in s.Spots:GetChildren() do
-		require_(spot:FindFirstChild("Anchor") and spot:FindFirstChild("Ring") and spot:FindFirstChild("Seal"), spot:GetFullName())
+		require_(
+			spot:FindFirstChild("Anchor") and spot:FindFirstChild("Ring") and spot:FindFirstChild("Seal"),
+			spot:GetFullName()
+		)
 	end
 	require_(s:FindFirstChild("Sign", true) and s:FindFirstChild("OwnerLabel", true), s.Name .. " sign")
 end
-require_(map:FindFirstChild("Forest") and map.Forest:FindFirstChild("Spawns") and #map.Forest.Spawns:GetChildren() > 0, "forest spawns")
+require_(
+	map:FindFirstChild("Forest")
+		and map.Forest:FindFirstChild("Spawns")
+		and #map.Forest.Spawns:GetChildren() > 0,
+	"forest spawns"
+)
 require_(map:FindFirstChild("Dojo") and map.Dojo:FindFirstChild("Dummies"), "dojo dummies")
 require_(map:FindFirstChild("Shop") and map.Shop:FindFirstChild("Counter"), "shop counter")
-require_(map:FindFirstChild("Courtyard") and map.Courtyard:FindFirstChild("Circle") and map.Courtyard:FindFirstChild("Altar"), "courtyard")
+require_(
+	map:FindFirstChild("Courtyard")
+		and map.Courtyard:FindFirstChild("Circle")
+		and map.Courtyard:FindFirstChild("Altar"),
+	"courtyard"
+)
 require_(map:FindFirstChild("ArrivalSpawn", true), "spawn location")
 
 fs.writeDir("dist")
@@ -89,7 +112,8 @@ if previewPath then
 		if op.kind == "ball" then
 			entry.k, entry.p, entry.radius = "ball", vec(op.center), op.radius
 		elseif op.kind == "cyl" then
-			entry.k, entry.p, entry.height, entry.radius = "cyl", vec(op.cframe.Position), op.height, op.radius
+			entry.k, entry.p, entry.height, entry.radius =
+				"cyl", vec(op.cframe.Position), op.height, op.radius
 		else
 			local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = op.cframe:GetComponents()
 			entry.k, entry.p, entry.z = op.kind, vec(op.cframe.Position), vec(op.size)
@@ -99,7 +123,8 @@ if previewPath then
 	end
 	local colors = {}
 	for material, color in TerrainPlan.MaterialColors do
-		colors[material.Name] = { math.floor(color.R * 255), math.floor(color.G * 255), math.floor(color.B * 255) }
+		colors[material.Name] =
+			{ math.floor(color.R * 255), math.floor(color.G * 255), math.floor(color.B * 255) }
 	end
 	local wc = TerrainPlan.WaterColor
 	scene.terrain = {
@@ -110,5 +135,12 @@ if previewPath then
 		step = 4,
 	}
 	fs.writeFile(previewPath, serde.encode("json", scene))
-	print(string.format("Wrote preview scene (%d parts, %d lights, %d terrain ops)", #scene.parts, #scene.lights, #terrainOps))
+	print(
+		string.format(
+			"Wrote preview scene (%d parts, %d lights, %d terrain ops)",
+			#scene.parts,
+			#scene.lights,
+			#terrainOps
+		)
+	)
 end

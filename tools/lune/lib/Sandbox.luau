@@ -19,7 +19,13 @@ local function polyfill()
 	roblox.implementMethod("Instance", "WaitForChild", function(self, name)
 		local child = self:FindFirstChild(name)
 		if not child then
-			error(string.format("WaitForChild: %s has no child %s (sandbox does not yield)", self:GetFullName(), name))
+			error(
+				string.format(
+					"WaitForChild: %s has no child %s (sandbox does not yield)",
+					self:GetFullName(),
+					name
+				)
+			)
 		end
 		return child
 	end)
@@ -46,7 +52,20 @@ local function lookAt(at, target, up)
 	right = right.Unit
 	local upv = right:Cross(look)
 	local back = -look
-	return RCFrame.new(at.X, at.Y, at.Z, right.X, upv.X, back.X, right.Y, upv.Y, back.Y, right.Z, upv.Z, back.Z)
+	return RCFrame.new(
+		at.X,
+		at.Y,
+		at.Z,
+		right.X,
+		upv.X,
+		back.X,
+		right.Y,
+		upv.Y,
+		back.Y,
+		right.Z,
+		upv.Z,
+		back.Z
+	)
 end
 local CFrameShim = setmetatable({ lookAt = lookAt }, { __index = RCFrame })
 Sandbox.CFrame = CFrameShim
@@ -56,7 +75,9 @@ function Sandbox.loadPlace(path: string)
 end
 
 -- overrides: table of extra/replacement globals (e.g. a fake `game` proxy).
-function Sandbox.new(game, overrides)
+-- transform: optional (source, fullName) -> source hook, used by harnesses to paper over
+-- engine features Lune lacks (it never changes game files on disk).
+function Sandbox.new(game, overrides, transform)
 	polyfill()
 	local cache = {}
 	local loading = {}
@@ -64,24 +85,69 @@ function Sandbox.new(game, overrides)
 
 	local base = {
 		-- Luau standard library
-		assert = assert, error = error, getmetatable = getmetatable, ipairs = ipairs, next = next,
-		pairs = pairs, pcall = pcall, print = print, rawequal = rawequal, rawget = rawget,
-		rawlen = rawlen, rawset = rawset, select = select, setmetatable = setmetatable,
-		tonumber = tonumber, tostring = tostring, type = type, typeof = typeof, unpack = table.unpack,
-		xpcall = xpcall, warn = function(...) print("[warn]", ...) end,
-		math = math, string = string, table = table, coroutine = coroutine, utf8 = utf8,
-		bit32 = bit32, buffer = buffer, os = os, debug = debug, vector = vector,
+		assert = assert,
+		error = error,
+		getmetatable = getmetatable,
+		ipairs = ipairs,
+		next = next,
+		pairs = pairs,
+		pcall = pcall,
+		print = print,
+		rawequal = rawequal,
+		rawget = rawget,
+		rawlen = rawlen,
+		rawset = rawset,
+		select = select,
+		setmetatable = setmetatable,
+		tonumber = tonumber,
+		tostring = tostring,
+		type = type,
+		typeof = typeof,
+		unpack = table.unpack,
+		xpcall = xpcall,
+		warn = function(...)
+			print("[warn]", ...)
+		end,
+		math = math,
+		string = string,
+		table = table,
+		coroutine = coroutine,
+		utf8 = utf8,
+		bit32 = bit32,
+		buffer = buffer,
+		os = os,
+		debug = debug,
+		vector = vector,
 		task = task,
-		tick = function() return os.clock() end,
-		time = function() return os.clock() - startClock end,
+		tick = function()
+			return os.clock()
+		end,
+		time = function()
+			return os.clock() - startClock
+		end,
 		-- Roblox datatypes
-		Axes = roblox.Axes, BrickColor = roblox.BrickColor, CFrame = CFrameShim, Color3 = roblox.Color3,
-		ColorSequence = roblox.ColorSequence, ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
-		Enum = roblox.Enum, Faces = roblox.Faces, Font = roblox.Font, Instance = roblox.Instance,
-		NumberRange = roblox.NumberRange, NumberSequence = roblox.NumberSequence,
-		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint, PhysicalProperties = roblox.PhysicalProperties,
-		Ray = roblox.Ray, Rect = roblox.Rect, Region3 = roblox.Region3, UDim = roblox.UDim, UDim2 = roblox.UDim2,
-		Vector2 = roblox.Vector2, Vector3 = roblox.Vector3, Vector2int16 = roblox.Vector2int16,
+		Axes = roblox.Axes,
+		BrickColor = roblox.BrickColor,
+		CFrame = CFrameShim,
+		Color3 = roblox.Color3,
+		ColorSequence = roblox.ColorSequence,
+		ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
+		Enum = roblox.Enum,
+		Faces = roblox.Faces,
+		Font = roblox.Font,
+		Instance = roblox.Instance,
+		NumberRange = roblox.NumberRange,
+		NumberSequence = roblox.NumberSequence,
+		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
+		PhysicalProperties = roblox.PhysicalProperties,
+		Ray = roblox.Ray,
+		Rect = roblox.Rect,
+		Region3 = roblox.Region3,
+		UDim = roblox.UDim,
+		UDim2 = roblox.UDim2,
+		Vector2 = roblox.Vector2,
+		Vector3 = roblox.Vector3,
+		Vector2int16 = roblox.Vector2int16,
 		Vector3int16 = roblox.Vector3int16,
 		game = game,
 		workspace = game and game:GetService("Workspace"),
@@ -96,28 +162,44 @@ function Sandbox.new(game, overrides)
 		if type(target) == "string" then
 			error("Sandbox require() only accepts ModuleScript instances, got string " .. target)
 		end
-		if cache[target] ~= nil then
-			return cache[target]
+		-- Lune returns a fresh userdata per Instance access, so cache by path, not identity.
+		local key = target:GetFullName()
+		if cache[key] ~= nil then
+			return cache[key]
 		end
 		assert(target:IsA("ModuleScript"), "require target is not a ModuleScript: " .. target:GetFullName())
-		if loading[target] then
-			error("cyclic require: " .. target:GetFullName())
+		if loading[key] then
+			error("cyclic require: " .. key)
 		end
-		loading[target] = true
+		loading[key] = true
 		-- luau.load copies the environment table and ignores metatables, so copy globals in.
 		local env = table.clone(base)
 		env.script = target
 		env.require = requireModule
 		env._G = env
-		local chunk = luau.load(target.Source, { debugName = target:GetFullName(), environment = env })
+		local source = target.Source
+		if transform then
+			source = transform(source, target:GetFullName())
+		end
+		local chunk = luau.load(source, { debugName = target:GetFullName(), environment = env })
 		local result = chunk()
-		loading[target] = nil
-		cache[target] = if result == nil then true else result
+		loading[key] = nil
+		cache[key] = if result == nil then true else result
 		return result
 	end
 	base.require = requireModule
 
 	self.require = requireModule
+	-- Runs a Script/LocalScript's source (they aren't requirable).
+	function self.run(scriptInstance)
+		local env = table.clone(base)
+		env.script = scriptInstance
+		env.require = requireModule
+		env._G = env
+		local chunk =
+			luau.load(scriptInstance.Source, { debugName = scriptInstance:GetFullName(), environment = env })
+		return chunk()
+	end
 	self.globals = base
 	-- Resolve "ReplicatedStorage/Shared/Rules/Economy" style paths.
 	function self.find(path: string)

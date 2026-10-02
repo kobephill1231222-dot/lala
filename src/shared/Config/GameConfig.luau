@@ -41,8 +41,8 @@ GameConfig.TeamPowerDivisor = 40 -- damage multiplier = 1 + teamPower / divisor
 -- Persistence
 GameConfig.AutosaveInterval = 90
 GameConfig.SessionLockStaleSeconds = 300
-GameConfig.LoadRetries = 6
-GameConfig.LoadRetryDelay = 4
+GameConfig.LoadRetries = 5
+GameConfig.LoadRetryDelay = 3
 GameConfig.SaveRetries = 4
 
 -- Travel

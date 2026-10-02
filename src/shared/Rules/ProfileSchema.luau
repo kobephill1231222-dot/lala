@@ -142,7 +142,8 @@ function ProfileSchema.sanitize(raw: any, now: number): ({ [string]: any }, { st
 	end
 	p.nextUid = math.max(integerIn(raw.nextUid, 1, 1e12, 1), maxUid + 1)
 
-	p.unlockedSpots = integerIn(raw.unlockedSpots, GameConfig.StartingSpots, GameConfig.SpotCount, GameConfig.StartingSpots)
+	p.unlockedSpots =
+		integerIn(raw.unlockedSpots, GameConfig.StartingSpots, GameConfig.SpotCount, GameConfig.StartingSpots)
 
 	-- Placements: each spot within the unlocked range holds at most one existing unit,
 	-- and each unit occupies at most one spot.

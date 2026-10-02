@@ -38,7 +38,15 @@ type Ctx = {
 }
 
 -- Adds a welded detail part. `shape` = "block" | "ball" | "ellipsoid" | "cyl" (along local Y) | "wedge"
-local function add(ctx: Ctx, shape: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material?, extra: { [string]: any }?): BasePart
+local function add(
+	ctx: Ctx,
+	shape: string,
+	size: Vector3,
+	cf: CFrame,
+	color: Color3,
+	material: Enum.Material?,
+	extra: { [string]: any }?
+): BasePart
 	local world = ctx.base * cf
 	local props: { [string]: any } = {
 		Size = size,
@@ -109,7 +117,16 @@ local function sorcererHair(ctx: Ctx, look: any)
 	if style == "Spiky" then
 		for i = 1, 7 do
 			local a = (i - 4) * 24
-			add(ctx, "wedge", V3(0.6, 1.3, 0.8), CFrame.new(0, HEAD_Y + 1.05, 0.35) * CFrame.Angles(0, rad(a), 0) * CFrame.new(0, 0, 0.55) * CFrame.Angles(rad(-35), 0, 0), hair)
+			add(
+				ctx,
+				"wedge",
+				V3(0.6, 1.3, 0.8),
+				CFrame.new(0, HEAD_Y + 1.05, 0.35)
+					* CFrame.Angles(0, rad(a), 0)
+					* CFrame.new(0, 0, 0.55)
+					* CFrame.Angles(rad(-35), 0, 0),
+				hair
+			)
 		end
 	elseif style == "Bob" then
 		for _, side in { -1, 1 } do
@@ -158,7 +175,14 @@ ACCESSORIES.BellStaff = function(ctx, look)
 	add(ctx, "cyl", V3(0.22, 5.4, 0.22), L(1.45, 2.6, -0.3), Color3.fromRGB(90, 60, 40), WOOD)
 	for i = 0, 5 do
 		local a = rad(i * 60)
-		add(ctx, "ball", V3(0.28, 0.28, 0.28), L(1.45 + math.cos(a) * 0.5, 5.6 + math.sin(a) * 0.5, -0.3), GOLD, Enum.Material.Metal)
+		add(
+			ctx,
+			"ball",
+			V3(0.28, 0.28, 0.28),
+			L(1.45 + math.cos(a) * 0.5, 5.6 + math.sin(a) * 0.5, -0.3),
+			GOLD,
+			Enum.Material.Metal
+		)
 	end
 	add(ctx, "ball", V3(0.42, 0.42, 0.42), L(1.45, 5.0, -0.3), GOLD, Enum.Material.Metal)
 	local _ = look
@@ -231,7 +255,14 @@ end
 ACCESSORIES.Orbs = function(ctx, look)
 	for i = 1, 3 do
 		local a = rad(i * 120 + 30)
-		add(ctx, "ball", V3(0.42, 0.42, 0.42), L(math.cos(a) * 1.9, 3.4 + (i % 2) * 0.5, math.sin(a) * 1.4), look.aura, NEON)
+		add(
+			ctx,
+			"ball",
+			V3(0.42, 0.42, 0.42),
+			L(math.cos(a) * 1.9, 3.4 + (i % 2) * 0.5, math.sin(a) * 1.4),
+			look.aura,
+			NEON
+		)
 	end
 end
 
@@ -240,14 +271,25 @@ ACCESSORIES.Halo = function(ctx, look)
 	for i = 1, segments do
 		if i % 5 ~= 0 then -- deliberate gaps: a fractured halo
 			local a = (i / segments) * math.pi * 2
-			local cf = CFrame.new(0, HEAD_Y + 0.6, 1.1) * CFrame.Angles(rad(-15), 0, 0) * CFrame.Angles(0, 0, a) * CFrame.new(0, 1.55, 0)
+			local cf = CFrame.new(0, HEAD_Y + 0.6, 1.1)
+				* CFrame.Angles(rad(-15), 0, 0)
+				* CFrame.Angles(0, 0, a)
+				* CFrame.new(0, 1.55, 0)
 			add(ctx, "block", V3(0.62, 0.14, 0.14), cf, look.aura, NEON)
 		end
 	end
 end
 
 ACCESSORIES.Veil = function(ctx, _look)
-	add(ctx, "block", V3(2.3, 3.8, 0.12), L(0, 2.8, 1.18, 8, 0, 0), Color3.fromRGB(40, 20, 60), FABRIC, { Transparency = 0.35 })
+	add(
+		ctx,
+		"block",
+		V3(2.3, 3.8, 0.12),
+		L(0, 2.8, 1.18, 8, 0, 0),
+		Color3.fromRGB(40, 20, 60),
+		FABRIC,
+		{ Transparency = 0.35 }
+	)
 end
 
 local function buildSorcerer(ctx: Ctx, look: any)
@@ -348,9 +390,32 @@ SPIRITS.Moth = function(ctx, look)
 		add(ctx, "block", V3(0.06, 1.0, 0.06), L(side * 0.3, y + 1.9, -0.3, -25, 0, side * -20), look.body)
 		add(ctx, "ball", V3(0.22, 0.22, 0.22), L(side * 0.5, y + 2.35, -0.55), look.wing, NEON)
 		-- Upper and lower wings
-		add(ctx, "block", V3(2.4, 1.9, 0.08), L(side * 1.35, y + 0.6, 0.35, 0, side * 18, side * 18), look.wing, NEON, { Transparency = 0.35 })
-		add(ctx, "block", V3(2.5, 0.1, 0.1), L(side * 1.42, y + 1.48, 0.33, 0, side * 18, side * 18), look.wingEdge, NEON)
-		add(ctx, "block", V3(1.6, 1.3, 0.08), L(side * 0.95, y - 0.75, 0.4, 0, side * 18, side * -22), look.wing, NEON, { Transparency = 0.45 })
+		add(
+			ctx,
+			"block",
+			V3(2.4, 1.9, 0.08),
+			L(side * 1.35, y + 0.6, 0.35, 0, side * 18, side * 18),
+			look.wing,
+			NEON,
+			{ Transparency = 0.35 }
+		)
+		add(
+			ctx,
+			"block",
+			V3(2.5, 0.1, 0.1),
+			L(side * 1.42, y + 1.48, 0.33, 0, side * 18, side * 18),
+			look.wingEdge,
+			NEON
+		)
+		add(
+			ctx,
+			"block",
+			V3(1.6, 1.3, 0.08),
+			L(side * 0.95, y - 0.75, 0.4, 0, side * 18, side * -22),
+			look.wing,
+			NEON,
+			{ Transparency = 0.45 }
+		)
 	end
 	if not ctx.ghost then
 		PartKit.particles(ctx.root, {
@@ -369,20 +434,48 @@ SPIRITS.Mask = function(ctx, look)
 	-- Tattered cloak
 	for i = 0, 5 do
 		local a = rad(i * 60)
-		add(ctx, "wedge", V3(1.2, 2.8, 0.5), CFrame.new(0, y - 1.7, 0) * CFrame.Angles(0, a, 0) * L(0, 0, 0.75, 180 - 12, 0, 0), look.cloak, FABRIC)
+		add(
+			ctx,
+			"wedge",
+			V3(1.2, 2.8, 0.5),
+			CFrame.new(0, y - 1.7, 0) * CFrame.Angles(0, a, 0) * L(0, 0, 0.75, 180 - 12, 0, 0),
+			look.cloak,
+			FABRIC
+		)
 	end
 	add(ctx, "ellipsoid", V3(2.4, 1.6, 2.2), L(0, y - 0.4, 0.15), look.cloak, FABRIC)
 	add(ctx, "ellipsoid", V3(1.9, 2.3, 0.6), L(0, y + 0.3, -0.95), look.mask)
 	for _, side in { -1, 1 } do
 		add(ctx, "block", V3(0.55, 0.16, 0.12), L(side * 0.42, y + 0.55, -1.25, 0, 0, side * -14), DARK)
 		add(ctx, "block", V3(0.3, 0.1, 0.1), L(side * 0.42, y + 0.55, -1.3, 0, 0, side * -14), look.eye, NEON)
-		add(ctx, "block", V3(0.1, 0.9, 0.1), L(side * 0.62, y + 0.05, -1.24, 0, 0, side * 8), look.marking, NEON)
+		add(
+			ctx,
+			"block",
+			V3(0.1, 0.9, 0.1),
+			L(side * 0.62, y + 0.05, -1.24, 0, 0, side * 8),
+			look.marking,
+			NEON
+		)
 		add(ctx, "ball", V3(0.7, 0.7, 0.7), L(side * 1.7, y - 1.0, -0.6), look.cloak, FABRIC)
 		add(ctx, "ball", V3(0.22, 0.22, 0.22), L(side * 1.7, y - 1.0, -0.98), look.eye, NEON)
 	end
 	for _, side in { -1, 1 } do
-		add(ctx, "wedge", V3(0.3, 1.1, 0.35), L(side * 0.62, y + 1.55, -0.9, -10, 0, side * -28), look.mask, Enum.Material.Marble)
-		add(ctx, "block", V3(0.08, 0.5, 0.08), L(side * 0.75, y + 1.45, -1.06, -10, 0, side * -28), look.marking, NEON)
+		add(
+			ctx,
+			"wedge",
+			V3(0.3, 1.1, 0.35),
+			L(side * 0.62, y + 1.55, -0.9, -10, 0, side * -28),
+			look.mask,
+			Enum.Material.Marble
+		)
+		add(
+			ctx,
+			"block",
+			V3(0.08, 0.5, 0.08),
+			L(side * 0.75, y + 1.45, -1.06, -10, 0, side * -28),
+			look.marking,
+			NEON
+		)
 	end
 	add(ctx, "block", V3(0.95, 0.3, 0.12), L(0, y - 0.45, -1.2), DARK)
 	for i = 0, 3 do
@@ -423,7 +516,14 @@ SPIRITS.Wolf = function(ctx, look)
 	add(ctx, "ellipsoid", V3(0.6, 0.6, 2.0), L(0, 2.7, 2.1, 35, 0, 0), fur, FABRIC)
 	add(ctx, "ellipsoid", V3(0.45, 0.45, 0.9), L(0, 3.35, 2.75, 35, 0, 0), accent, NEON)
 	for i = 0, 2 do
-		add(ctx, "block", V3(1.75, 0.1, 0.25), L(0, 2.25 - i * 0.05, -0.2 + i * 0.6, 0, 20 - i * 20, 0), accent, NEON)
+		add(
+			ctx,
+			"block",
+			V3(1.75, 0.1, 0.25),
+			L(0, 2.25 - i * 0.05, -0.2 + i * 0.6, 0, 20 - i * 20, 0),
+			accent,
+			NEON
+		)
 	end
 	if not ctx.ghost then
 		PartKit.particles(ctx.root, {
@@ -450,23 +550,58 @@ SPIRITS.Serpent = function(ctx, look)
 		local frame = CFrame.new(pos) * CFrame.Angles(0, -a, 0)
 		add(ctx, "ellipsoid", V3(size, size * 0.85, size * 1.3), frame, scale, Enum.Material.Basalt)
 		if i % 2 == 0 then
-			add(ctx, "block", V3(size * 0.95, 0.14, 0.16), frame * CFrame.new(0, size * 0.3, 0) * CFrame.Angles(0, 0, rad(20)), crack, NEON)
+			add(
+				ctx,
+				"block",
+				V3(size * 0.95, 0.14, 0.16),
+				frame * CFrame.new(0, size * 0.3, 0) * CFrame.Angles(0, 0, rad(20)),
+				crack,
+				NEON
+			)
 		end
-		add(ctx, "wedge", V3(0.25, 0.5, 0.5), frame * CFrame.new(0, size * 0.42, 0.2), look.horn, Enum.Material.Marble)
+		add(
+			ctx,
+			"wedge",
+			V3(0.25, 0.5, 0.5),
+			frame * CFrame.new(0, size * 0.42, 0.2),
+			look.horn,
+			Enum.Material.Marble
+		)
 	end
 	local head = L(0, 6.2, -0.6, 10, 0, 0)
 	add(ctx, "ellipsoid", V3(2.2, 1.6, 2.8), head, scale, Enum.Material.Basalt)
 	add(ctx, "block", V3(2.25, 0.12, 2.2), head * L(0, 0.1, 0.05), crack, NEON)
 	add(ctx, "wedge", V3(1.7, 0.6, 1.4), head * L(0, -0.75, -0.9, 180, 0, 0), scale, Enum.Material.Basalt)
 	for _, side in { -1, 1 } do
-		add(ctx, "block", V3(0.42, 0.16, 0.2), head * L(side * 0.55, 0.25, -1.15, 0, 0, side * -15), look.eye, NEON)
-		add(ctx, "wedge", V3(0.35, 1.6, 0.45), head * L(side * 0.65, 1.05, 0.55, -40, 0, side * -20), look.horn, Enum.Material.Marble)
+		add(
+			ctx,
+			"block",
+			V3(0.42, 0.16, 0.2),
+			head * L(side * 0.55, 0.25, -1.15, 0, 0, side * -15),
+			look.eye,
+			NEON
+		)
+		add(
+			ctx,
+			"wedge",
+			V3(0.35, 1.6, 0.45),
+			head * L(side * 0.65, 1.05, 0.55, -40, 0, side * -20),
+			look.horn,
+			Enum.Material.Marble
+		)
 		add(ctx, "block", V3(0.08, 0.9, 0.08), head * L(side * 0.4, 0.45, -0.4, 0, 0, side * 30), crack, NEON)
 	end
 	add(ctx, "block", V3(1.2, 0.08, 0.6), head * L(0, -0.42, -1.05), crack, NEON)
 	for i = 1, 4 do
 		local a = rad(i * 90 + 20)
-		add(ctx, "block", V3(0.45, 0.8, 0.25), L(math.cos(a) * 2.8, 4.6 + (i % 2) * 1.1, math.sin(a) * 2.8, 20, i * 40, 30), crack, NEON)
+		add(
+			ctx,
+			"block",
+			V3(0.45, 0.8, 0.25),
+			L(math.cos(a) * 2.8, 4.6 + (i % 2) * 1.1, math.sin(a) * 2.8, 20, i * 40, 30),
+			crack,
+			NEON
+		)
 	end
 end
 
@@ -531,7 +666,7 @@ end
 
 -- Builds the unit standing at `baseCFrame` (feet at its position, facing its LookVector).
 function CharacterModels.build(id: string, baseCFrame: CFrame, options: Options?): Model
-	local opts = options or {}
+	local opts: Options = options or {}
 	local def = Characters.get(id)
 	assert(def, "unknown character " .. tostring(id))
 	local model = Instance.new("Model")

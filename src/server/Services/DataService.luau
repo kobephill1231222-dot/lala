@@ -59,7 +59,9 @@ local function createBackingStore(): (any, boolean)
 			store:GetAsync("__probe")
 		end)
 		if not probeOk then
-			warn("[Cursebound] DataStore unavailable in Studio; using a temporary in-memory store (progress won't save).")
+			warn(
+				"[Cursebound] DataStore unavailable in Studio; using a temporary in-memory store (progress won't save)."
+			)
 			return MockDataStore.new(), false
 		end
 	elseif not ok then
@@ -72,8 +74,7 @@ local function createBackingStore(): (any, boolean)
 			UpdateAsync = function()
 				error("DataStore unavailable")
 			end,
-		},
-			true
+		}, true
 	end
 	return store, true
 end
@@ -140,7 +141,9 @@ local function onPlayerAdded(player: Player)
 	if status ~= "ok" then
 		warn("[Cursebound] Load failed for", session.key, raw)
 		sessions[player] = nil
-		player:Kick("We couldn't load your sanctuary right now. Your progress is safe - please rejoin in a moment.")
+		player:Kick(
+			"We couldn't load your sanctuary right now. Your progress is safe - please rejoin in a moment."
+		)
 		return
 	end
 

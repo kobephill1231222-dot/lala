@@ -9,9 +9,11 @@ local sb = Sandbox.new(game)
 local function req(p)
 	return sb.requirePath("ReplicatedStorage/Shared/" .. p)
 end
-local Economy, Actions, Schema, Tutorial = req("Rules/Economy"), req("Rules/Actions"), req("Rules/ProfileSchema"), req("Rules/Tutorial")
+local Economy, Actions, Schema, Tutorial =
+	req("Rules/Economy"), req("Rules/Actions"), req("Rules/ProfileSchema"), req("Rules/Tutorial")
 local Prng, Format = req("Util/Prng"), req("Util/Format")
-local Characters, Banners, GameConfig, Enemies = req("Config/Characters"), req("Config/Banners"), req("Config/GameConfig"), req("Config/Enemies")
+local Characters, Banners, GameConfig, Enemies =
+	req("Config/Characters"), req("Config/Banners"), req("Config/GameConfig"), req("Config/Enemies")
 
 local minutes = tonumber(process.args[2]) or 120
 local rng = Prng.new(7)
@@ -21,7 +23,15 @@ local milestones = {}
 local function mark(name)
 	if not milestones[name] then
 		milestones[name] = t
-		print(string.format("[%s] %s  (rate %s, energy %s)", Format.duration(t), name, Format.rate(Economy.totalRate(p)), Format.abbreviate(p.energy)))
+		print(
+			string.format(
+				"[%s] %s  (rate %s, energy %s)",
+				Format.duration(t),
+				name,
+				Format.rate(Economy.totalRate(p)),
+				Format.abbreviate(p.energy)
+			)
+		)
 	end
 end
 
@@ -31,7 +41,9 @@ local function expectedBaseRate(bannerId)
 	for rarity, c in chances do
 		local pool = Characters.ByRarity[rarity]
 		local avg = 0
-		for _, d in pool do avg += d.rate end
+		for _, d in pool do
+			avg += d.rate
+		end
 		e += c * avg / #pool
 	end
 	return e
@@ -42,13 +54,17 @@ local function placedList()
 	Economy.forEachPlaced(p, function(spot, uid, unit)
 		table.insert(list, { spot = spot, uid = uid, rate = Economy.unitBaseRate(unit) })
 	end)
-	table.sort(list, function(a, b) return a.rate < b.rate end)
+	table.sort(list, function(a, b)
+		return a.rate < b.rate
+	end)
 	return list
 end
 
 local function freeSpot()
 	for s = 1, p.unlockedSpots do
-		if not p.spots[tostring(s)] then return s end
+		if not p.spots[tostring(s)] then
+			return s
+		end
 	end
 end
 
@@ -61,19 +77,27 @@ local function autoPlace()
 		for uid, unit in p.units do
 			if not Actions.spotOf(p, uid) then
 				local r = Economy.unitBaseRate(unit)
-				if r > bestRate then best, bestRate = uid, r end
+				if r > bestRate then
+					best, bestRate = uid, r
+				end
 			end
 		end
-		if not best then return end
+		if not best then
+			return
+		end
 		local s = freeSpot()
 		if s then
-			Actions.place(p, best, s, t); changed = true
-			if Tutorial.advance(p, "place") then mark("tutorial: placed") end
+			Actions.place(p, best, s, t)
+			changed = true
+			if Tutorial.advance(p, "place") then
+				mark("tutorial: placed")
+			end
 		else
 			local placed = placedList()
 			if placed[1] and placed[1].rate < bestRate then
 				Actions.unplace(p, placed[1].spot, t)
-				Actions.place(p, best, placed[1].spot, t); changed = true
+				Actions.place(p, best, placed[1].spot, t)
+				changed = true
 			end
 		end
 	end
@@ -84,7 +108,11 @@ local function releaseJunk()
 	local placed = placedList()
 	local floor = placed[1] and placed[1].rate or 0
 	for uid, unit in p.units do
-		if not Actions.spotOf(p, uid) and Economy.unitBaseRate(unit) <= floor and Actions.countUnits(p) > 12 then
+		if
+			not Actions.spotOf(p, uid)
+			and Economy.unitBaseRate(unit) <= floor
+			and Actions.countUnits(p) > 12
+		then
 			Actions.release(p, uid, t)
 		end
 	end
@@ -112,13 +140,20 @@ local function options()
 		local tc = Economy.trainCost(unit)
 		if tc then
 			local def = Characters.get(unit.id)
-			table.insert(opts, { kind = "train", uid = entry.uid, cost = tc, gain = def.rate * GameConfig.RatePerLevel * mult })
+			table.insert(opts, {
+				kind = "train",
+				uid = entry.uid,
+				cost = tc,
+				gain = def.rate * GameConfig.RatePerLevel * mult,
+			})
 		end
 	end
 	local pc = Economy.upgradeCost("production", p.upgrades.production)
 	if pc then
 		local base = 0
-		for _, e in placed do base += e.rate end
+		for _, e in placed do
+			base += e.rate
+		end
 		table.insert(opts, { kind = "production", cost = pc, gain = base * GameConfig.ProductionPerUpgrade })
 	end
 	return opts
@@ -140,7 +175,10 @@ while t < minutes * 60 do
 	-- Tutorial-shaped opening.
 	if p.tutorial == 2 and p.energy >= 50 then
 		local ok = Actions.summon(p, "lantern", 1, rng, t)
-		if ok then Tutorial.advance(p, "summon"); mark("first summon") end
+		if ok then
+			Tutorial.advance(p, "summon")
+			mark("first summon")
+		end
 	end
 	autoPlace()
 	if p.tutorial == 4 and p.energy >= Economy.upgradeCost("production", 0) then
@@ -154,9 +192,13 @@ while t < minutes * 60 do
 			local best, bestScore = nil, -1
 			for _, o in options() do
 				local score = o.gain / o.cost
-				if score > bestScore then best, bestScore = o, score end
+				if score > bestScore then
+					best, bestScore = o, score
+				end
 			end
-			if not best or best.cost > p.energy then break end
+			if not best or best.cost > p.energy then
+				break
+			end
 			if best.kind == "summon" then
 				local ok, res = Actions.summon(p, best.id, 1, rng, t)
 				if ok then
@@ -166,7 +208,9 @@ while t < minutes * 60 do
 				end
 			elseif best.kind == "unlock" then
 				local ok, res = Actions.unlockSpot(p, t)
-				if ok then mark("spot " .. res.spot) end
+				if ok then
+					mark("spot " .. res.spot)
+				end
 			elseif best.kind == "train" then
 				Actions.train(p, best.uid, t)
 			elseif best.kind == "production" then
@@ -179,21 +223,38 @@ while t < minutes * 60 do
 	-- Every 5 minutes the bot spends a minute in the forest: ~8 Gloomlings + 2 Wailers.
 	if t >= nextFight then
 		local reward = 8 * Economy.combatReward("gloomling", p) + 2 * Economy.combatReward("wailer", p)
-		local seals = math.floor(8 * Enemies.ById.gloomling.sealChance + 2 * Enemies.ById.wailer.sealChance + 0.5)
+		local seals =
+			math.floor(8 * Enemies.ById.gloomling.sealChance + 2 * Enemies.ById.wailer.sealChance + 0.5)
 		Actions.grantReward(p, reward, seals)
 		totalCombat += reward
-		if Tutorial.advance(p, "kill") then mark("tutorial complete") end
+		if Tutorial.advance(p, "kill") then
+			mark("tutorial complete")
+		end
 		if p.seals >= 12 then
 			local ok, res = Actions.summon(p, "sealed", 1, rng, t)
-			if ok then for _, u in res.units do mark("first " .. u.rarity) end end
+			if ok then
+				for _, u in res.units do
+					mark("first " .. u.rarity)
+				end
+			end
 		end
 		nextFight = t + 300
 		t += 60
 	end
 	t += 1
 	if t % 600 == 0 then
-		print(string.format("  t=%s rate=%s energy=%s spots=%d units=%d prod=%d seals=%d combatTotal=%s",
-			Format.duration(t), Format.rate(Economy.totalRate(p)), Format.abbreviate(p.energy), p.unlockedSpots,
-			Actions.countUnits(p), p.upgrades.production, p.seals, Format.abbreviate(totalCombat)))
+		print(
+			string.format(
+				"  t=%s rate=%s energy=%s spots=%d units=%d prod=%d seals=%d combatTotal=%s",
+				Format.duration(t),
+				Format.rate(Economy.totalRate(p)),
+				Format.abbreviate(p.energy),
+				p.unlockedSpots,
+				Actions.countUnits(p),
+				p.upgrades.production,
+				p.seals,
+				Format.abbreviate(totalCombat)
+			)
+		)
 	end
 end

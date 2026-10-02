@@ -1,0 +1,12 @@
+[
+  {"name": "01_arrival", "pos": [0, 13, 190], "look": [0, 22, 100], "fov": 70, "focus": [0, 6, 140]},
+  {"name": "02_aerial", "pos": [60, 300, 380], "look": [0, 0, 20], "fov": 60, "focus": [0, 0, 0], "fog": 0.0009},
+  {"name": "03_plan", "pos": [0, 760, 1], "look": [0, 0, 0], "fov": 50, "focus": [0, 0, 0], "fog": 0.0},
+  {"name": "04_terrace", "pos": [0, 9, 56], "look": [0, 30, -8], "fov": 70, "focus": [0, 5, 20]},
+  {"name": "05_sanctuary_gate", "pos": [70, 10, 132], "look": [107, 4, 185], "fov": 70, "focus": [107, 4, 185]},
+  {"name": "06_sanctuary_inside", "pos": [91, 11, 160], "look": [112, 4, 194], "fov": 70, "focus": [107, 4, 185]},
+  {"name": "07_courtyard", "pos": [80, 9, -4], "look": [140, 4, -4], "fov": 70, "focus": [126, 2, -4]},
+  {"name": "08_west_street", "pos": [-80, 8, 6], "look": [-130, 6, 0], "fov": 70, "focus": [-110, 2, 0]},
+  {"name": "09_forest_gate", "pos": [0, 9, -70], "look": [0, 14, -110], "fov": 70, "focus": [0, 2, -104]},
+  {"name": "10_forest_inside", "pos": [-20, 8, -140], "look": [10, 4, -200], "fov": 70, "focus": [0, 2, -170]}
+]

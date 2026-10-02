@@ -60,7 +60,8 @@ TerrainPlan.Ponds = {
 
 local function catmull(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: number): Vector3
 	local t2, t3 = t * t, t * t * t
-	return (p1 * 2 + (p2 - p0) * t + (p0 * 2 - p1 * 5 + p2 * 4 - p3) * t2 + (p1 * 3 - p0 - p2 * 3 + p3) * t3) * 0.5
+	return (p1 * 2 + (p2 - p0) * t + (p0 * 2 - p1 * 5 + p2 * 4 - p3) * t2 + (p1 * 3 - p0 - p2 * 3 + p3) * t3)
+		* 0.5
 end
 
 -- Smooth polyline through control points, sampled every `spacing` studs (approximately).
@@ -145,7 +146,11 @@ function TerrainPlan.isReserved(x: number, z: number, margin: number): boolean
 	local function near(p: Vector3, radius: number): boolean
 		return math.sqrt((x - p.X) ^ 2 + (z - p.Z) ^ 2) < radius + margin
 	end
-	if near(Layout.CourtyardCenter, 42) or near(Layout.SpawnPosition, 34) or near(Layout.DojoPosition, 34) then
+	if
+		near(Layout.CourtyardCenter, 42)
+		or near(Layout.SpawnPosition, 34)
+		or near(Layout.DojoPosition, 34)
+	then
 		return true
 	end
 	if near(Layout.ShopPosition, 26) or near(Layout.WestPlaza, 22) or near(Layout.PagodaPosition, 16) then
@@ -175,7 +180,10 @@ function TerrainPlan.create(): { Op }
 	local rng = Prng.new(1337)
 
 	-- 1. Base plain, top at y = 0.
-	table.insert(ops, { kind = "block", cframe = CFrame.new(0, -10, 0), size = V3(1400, 20, 1400), material = M.Grass })
+	table.insert(
+		ops,
+		{ kind = "block", cframe = CFrame.new(0, -10, 0), size = V3(1400, 20, 1400), material = M.Grass }
+	)
 
 	-- 2. Distant mountains: big rocky shapes for the skyline, half-lost in haze.
 	for i = 0, 17 do
@@ -185,7 +193,12 @@ function TerrainPlan.create(): { Op }
 		local peak = rng:NextNumber(70, 150)
 		local c = V3(math.sin(angle) * dist, peak - radius, -math.cos(angle) * dist)
 		addHill(ops, c, radius, M.Grass)
-		addHill(ops, c + V3(rng:NextNumber(-20, 20), radius * 0.35, rng:NextNumber(-20, 20)), radius * 0.68, M.Rock)
+		addHill(
+			ops,
+			c + V3(rng:NextNumber(-20, 20), radius * 0.35, rng:NextNumber(-20, 20)),
+			radius * 0.68,
+			M.Rock
+		)
 	end
 
 	-- 3. Inner hills that cradle the village. Their ground footprint stays outside r = 272.
@@ -198,7 +211,12 @@ function TerrainPlan.create(): { Op }
 		local c = V3(math.sin(angle) * dist, h - radius, -math.cos(angle) * dist)
 		addHill(ops, c, radius, if rng:NextNumber() < 0.25 then M.Ground else M.Grass)
 		if rng:NextNumber() < 0.4 then
-			addHill(ops, c + V3(rng:NextNumber(-12, 12), radius * 0.55, rng:NextNumber(-12, 12)), radius * 0.45, M.Rock)
+			addHill(
+				ops,
+				c + V3(rng:NextNumber(-12, 12), radius * 0.55, rng:NextNumber(-12, 12)),
+				radius * 0.45,
+				M.Rock
+			)
 		end
 	end
 
@@ -214,7 +232,10 @@ function TerrainPlan.create(): { Op }
 		local radius = rng:NextNumber(14, 26)
 		local h = rng:NextNumber(2.5, 6)
 		local footprint = math.sqrt(2 * radius * h - h * h)
-		if not TerrainPlan.isReserved(x, z, footprint + 4) and TerrainPlan.distanceToStream(x, z) > footprint + 8 then
+		if
+			not TerrainPlan.isReserved(x, z, footprint + 4)
+			and TerrainPlan.distanceToStream(x, z) > footprint + 8
+		then
 			addHill(ops, V3(x, h - radius, z), radius, M.Grass)
 			placed += 1
 		end
@@ -231,9 +252,27 @@ function TerrainPlan.create(): { Op }
 	})
 
 	-- 6. Moat around the shrine terrace.
-	table.insert(ops, { kind = "cyl", cframe = CFrame.new(0, 2, 0), height = 20, radius = Layout.MoatOuterRadius, material = M.Air })
-	table.insert(ops, { kind = "cyl", cframe = CFrame.new(0, -8, 0), height = 4, radius = Layout.MoatOuterRadius, material = M.Sand })
-	table.insert(ops, { kind = "cyl", cframe = CFrame.new(0, (-6 + Layout.WaterY) / 2, 0), height = Layout.WaterY + 6, radius = Layout.MoatOuterRadius, material = M.Water })
+	table.insert(ops, {
+		kind = "cyl",
+		cframe = CFrame.new(0, 2, 0),
+		height = 20,
+		radius = Layout.MoatOuterRadius,
+		material = M.Air,
+	})
+	table.insert(ops, {
+		kind = "cyl",
+		cframe = CFrame.new(0, -8, 0),
+		height = 4,
+		radius = Layout.MoatOuterRadius,
+		material = M.Sand,
+	})
+	table.insert(ops, {
+		kind = "cyl",
+		cframe = CFrame.new(0, (-6 + Layout.WaterY) / 2, 0),
+		height = Layout.WaterY + 6,
+		radius = Layout.MoatOuterRadius,
+		material = M.Water,
+	})
 	table.insert(ops, {
 		kind = "cyl",
 		cframe = CFrame.new(0, (Layout.TerraceY - 8) / 2, 0),
@@ -249,8 +288,18 @@ function TerrainPlan.create(): { Op }
 		local mid = (a + b) / 2
 		local frame = CFrame.lookAt(V3(mid.X, 0, mid.Z), V3(b.X, 0, b.Z))
 		local len = (b - a).Magnitude + 2
-		table.insert(ops, { kind = "block", cframe = frame * CFrame.new(0, 2, 0), size = V3(TerrainPlan.StreamWidth, 12, len), material = M.Air })
-		table.insert(ops, { kind = "block", cframe = frame * CFrame.new(0, -5, 0), size = V3(TerrainPlan.StreamWidth + 2, 2, len), material = M.Mud })
+		table.insert(ops, {
+			kind = "block",
+			cframe = frame * CFrame.new(0, 2, 0),
+			size = V3(TerrainPlan.StreamWidth, 12, len),
+			material = M.Air,
+		})
+		table.insert(ops, {
+			kind = "block",
+			cframe = frame * CFrame.new(0, -5, 0),
+			size = V3(TerrainPlan.StreamWidth + 2, 2, len),
+			material = M.Mud,
+		})
 		table.insert(ops, {
 			kind = "block",
 			cframe = frame * CFrame.new(0, (TerrainPlan.StreamWaterY - 4) / 2, 0),
@@ -260,16 +309,52 @@ function TerrainPlan.create(): { Op }
 	end
 	-- Spring pool at the source
 	local spring = TerrainPlan.StreamPoints[1]
-	table.insert(ops, { kind = "cyl", cframe = CFrame.new(spring.X, 2, spring.Z), height = 12, radius = 11, material = M.Air })
-	table.insert(ops, { kind = "cyl", cframe = CFrame.new(spring.X, -6, spring.Z), height = 2, radius = 11, material = M.Mud })
-	table.insert(ops, { kind = "cyl", cframe = CFrame.new(spring.X, (TerrainPlan.StreamWaterY - 5) / 2, spring.Z), height = TerrainPlan.StreamWaterY + 5, radius = 11, material = M.Water })
+	table.insert(ops, {
+		kind = "cyl",
+		cframe = CFrame.new(spring.X, 2, spring.Z),
+		height = 12,
+		radius = 11,
+		material = M.Air,
+	})
+	table.insert(ops, {
+		kind = "cyl",
+		cframe = CFrame.new(spring.X, -6, spring.Z),
+		height = 2,
+		radius = 11,
+		material = M.Mud,
+	})
+	table.insert(ops, {
+		kind = "cyl",
+		cframe = CFrame.new(spring.X, (TerrainPlan.StreamWaterY - 5) / 2, spring.Z),
+		height = TerrainPlan.StreamWaterY + 5,
+		radius = 11,
+		material = M.Water,
+	})
 
 	-- 8. Koi pond(s) near the arrival plaza.
 	for _, pond in TerrainPlan.Ponds do
 		local c = pond.center
-		table.insert(ops, { kind = "cyl", cframe = CFrame.new(c.X, 2, c.Z), height = 10, radius = pond.radius, material = M.Air })
-		table.insert(ops, { kind = "cyl", cframe = CFrame.new(c.X, -4.5, c.Z), height = 2, radius = pond.radius, material = M.Mud })
-		table.insert(ops, { kind = "cyl", cframe = CFrame.new(c.X, -2.2, c.Z), height = 2.6, radius = pond.radius, material = M.Water })
+		table.insert(ops, {
+			kind = "cyl",
+			cframe = CFrame.new(c.X, 2, c.Z),
+			height = 10,
+			radius = pond.radius,
+			material = M.Air,
+		})
+		table.insert(ops, {
+			kind = "cyl",
+			cframe = CFrame.new(c.X, -4.5, c.Z),
+			height = 2,
+			radius = pond.radius,
+			material = M.Mud,
+		})
+		table.insert(ops, {
+			kind = "cyl",
+			cframe = CFrame.new(c.X, -2.2, c.Z),
+			height = 2.6,
+			radius = pond.radius,
+			material = M.Water,
+		})
 	end
 
 	-- 9. Cursed forest floor: darker ground with soft undulations.
@@ -286,7 +371,12 @@ function TerrainPlan.create(): { Op }
 		local z = fz.Z + rng:NextNumber(-fs.Z / 2, fs.Z / 2)
 		local radius = rng:NextNumber(8, 14)
 		local h = rng:NextNumber(0.8, 1.8)
-		table.insert(ops, { kind = "ball", center = V3(x, h - radius, z), radius = radius, material = if rng:NextNumber() < 0.3 then M.Mud else M.LeafyGrass })
+		table.insert(ops, {
+			kind = "ball",
+			center = V3(x, h - radius, z),
+			radius = radius,
+			material = if rng:NextNumber() < 0.3 then M.Mud else M.LeafyGrass,
+		})
 		table.insert(hills, { c = V3(x, h - radius, z), r = radius })
 	end
 

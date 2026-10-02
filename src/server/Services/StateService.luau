@@ -18,26 +18,22 @@ local FLUSH_INTERVAL = 0.12
 local services: any
 local dirty: { [Player]: boolean } = {}
 
+local function findOrCreate(parent: Instance, className: string, name: string): Instance
+	local existing = parent:FindFirstChild(name)
+	if existing then
+		return existing
+	end
+	local inst = Instance.new(className)
+	inst.Name = name
+	inst.Parent = parent
+	return inst
+end
+
 local function ensureLeaderstats(player: Player): (StringValue, StringValue)
-	local stats = player:FindFirstChild("leaderstats")
-	if not stats then
-		stats = Instance.new("Folder")
-		stats.Name = "leaderstats"
-		stats.Parent = player
-	end
-	local energy = stats:FindFirstChild("Energy") :: StringValue?
-	if not energy then
-		energy = Instance.new("StringValue")
-		energy.Name = "Energy"
-		energy.Parent = stats
-	end
-	local rate = stats:FindFirstChild("Rate") :: StringValue?
-	if not rate then
-		rate = Instance.new("StringValue")
-		rate.Name = "Rate"
-		rate.Parent = stats
-	end
-	return energy :: StringValue, rate :: StringValue
+	local stats = findOrCreate(player, "Folder", "leaderstats")
+	local energy = findOrCreate(stats, "StringValue", "Energy") :: StringValue
+	local rate = findOrCreate(stats, "StringValue", "Rate") :: StringValue
+	return energy, rate
 end
 
 local function send(player: Player)

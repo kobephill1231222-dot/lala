@@ -31,19 +31,37 @@ return function(ctx)
 		local lance = Abilities.ById.lance
 		local burst = Abilities.ById.burst
 		it("arc hits in front and misses behind", function()
-			expect(CombatMath.hits("Arc", origin, north, strike.range, strike.width, Vector3.new(0, 0, -8), 2)).toBe(true)
-			expect(CombatMath.hits("Arc", origin, north, strike.range, strike.width, Vector3.new(0, 0, 8), 2)).toBe(false)
-			expect(CombatMath.hits("Arc", origin, north, strike.range, strike.width, Vector3.new(0, 0, -20), 2)).toBe(false)
+			expect(
+				CombatMath.hits("Arc", origin, north, strike.range, strike.width, Vector3.new(0, 0, -8), 2)
+			).toBe(true)
+			expect(CombatMath.hits("Arc", origin, north, strike.range, strike.width, Vector3.new(0, 0, 8), 2)).toBe(
+				false
+			)
+			expect(
+				CombatMath.hits("Arc", origin, north, strike.range, strike.width, Vector3.new(0, 0, -20), 2)
+			).toBe(false)
 		end)
 		it("line hits along the aim within its width", function()
-			expect(CombatMath.hits("Line", origin, north, lance.range, lance.width, Vector3.new(3, 0, -40), 2)).toBe(true)
-			expect(CombatMath.hits("Line", origin, north, lance.range, lance.width, Vector3.new(12, 0, -20), 2)).toBe(false)
-			expect(CombatMath.hits("Line", origin, north, lance.range, lance.width, Vector3.new(0, 0, 10), 2)).toBe(false)
+			expect(
+				CombatMath.hits("Line", origin, north, lance.range, lance.width, Vector3.new(3, 0, -40), 2)
+			).toBe(true)
+			expect(
+				CombatMath.hits("Line", origin, north, lance.range, lance.width, Vector3.new(12, 0, -20), 2)
+			).toBe(false)
+			expect(CombatMath.hits("Line", origin, north, lance.range, lance.width, Vector3.new(0, 0, 10), 2)).toBe(
+				false
+			)
 		end)
 		it("radius hits all around but not far away or far above", function()
-			expect(CombatMath.hits("Radius", origin, north, burst.range, 0, Vector3.new(-15, 0, 5), 2)).toBe(true)
-			expect(CombatMath.hits("Radius", origin, north, burst.range, 0, Vector3.new(30, 0, 0), 2)).toBe(false)
-			expect(CombatMath.hits("Radius", origin, north, burst.range, 0, Vector3.new(0, 40, 0), 2)).toBe(false)
+			expect(CombatMath.hits("Radius", origin, north, burst.range, 0, Vector3.new(-15, 0, 5), 2)).toBe(
+				true
+			)
+			expect(CombatMath.hits("Radius", origin, north, burst.range, 0, Vector3.new(30, 0, 0), 2)).toBe(
+				false
+			)
+			expect(CombatMath.hits("Radius", origin, north, burst.range, 0, Vector3.new(0, 40, 0), 2)).toBe(
+				false
+			)
 		end)
 	end)
 
@@ -62,7 +80,10 @@ return function(ctx)
 			expect(Layout.inDojo(Layout.TravelPoints.Dojo.Position)).toBe(true)
 		end)
 		it("places summoning travel point within ritual range", function()
-			expect((Layout.TravelPoints.Courtyard.Position - Layout.CourtyardCenter).Magnitude < Layout.SummonRadius).toBe(true)
+			expect(
+				(Layout.TravelPoints.Courtyard.Position - Layout.CourtyardCenter).Magnitude
+					< Layout.SummonRadius
+			).toBe(true)
 		end)
 		it("keeps sanctuaries apart from each other", function()
 			for i = 1, #Layout.PlotAngles do

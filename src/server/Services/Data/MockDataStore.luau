@@ -25,7 +25,7 @@ function MockDataStore.new()
 	}, MockDataStore)
 end
 
-function MockDataStore:_maybeFail()
+function MockDataStore._maybeFail(self: any)
 	self.calls += 1
 	if self.failNext > 0 then
 		self.failNext -= 1

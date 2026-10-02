@@ -63,7 +63,13 @@ function PartKit.ellipsoid(parent: Instance?, props: Props): BasePart
 end
 
 -- Vertical cylinder centred on `cf` (Roblox cylinders run along X, so rotate onto Y).
-function PartKit.cylinderY(parent: Instance?, diameter: number, height: number, cf: CFrame, props: { [string]: any }?): BasePart
+function PartKit.cylinderY(
+	parent: Instance?,
+	diameter: number,
+	height: number,
+	cf: CFrame,
+	props: { [string]: any }?
+): BasePart
 	local p = (props or {}) :: any
 	p.Shape = Enum.PartType.Cylinder
 	p.Size = Vector3.new(height, diameter, diameter)
@@ -72,7 +78,13 @@ function PartKit.cylinderY(parent: Instance?, diameter: number, height: number, 
 end
 
 -- Cylinder whose axis runs from a to b.
-function PartKit.cylinderBetween(parent: Instance?, a: Vector3, b: Vector3, diameter: number, props: { [string]: any }?): BasePart
+function PartKit.cylinderBetween(
+	parent: Instance?,
+	a: Vector3,
+	b: Vector3,
+	diameter: number,
+	props: { [string]: any }?
+): BasePart
 	local p = (props or {}) :: any
 	local length = (b - a).Magnitude
 	local mid = (a + b) / 2
@@ -88,7 +100,14 @@ function PartKit.cylinderBetween(parent: Instance?, a: Vector3, b: Vector3, diam
 end
 
 -- Block spanning from a to b (its Z axis follows the segment), for beams, planks and ropes.
-function PartKit.blockBetween(parent: Instance?, a: Vector3, b: Vector3, width: number, height: number, props: { [string]: any }?): BasePart
+function PartKit.blockBetween(
+	parent: Instance?,
+	a: Vector3,
+	b: Vector3,
+	width: number,
+	height: number,
+	props: { [string]: any }?
+): BasePart
 	local p = (props or {}) :: any
 	local length = (b - a).Magnitude
 	p.Size = Vector3.new(width, height, length)
@@ -118,7 +137,13 @@ function PartKit.folder(parent: Instance?, name: string): Folder
 	return folder
 end
 
-function PartKit.light(parent: Instance, color: Color3, range: number, brightness: number, shadows: boolean?): PointLight
+function PartKit.light(
+	parent: Instance,
+	color: Color3,
+	range: number,
+	brightness: number,
+	shadows: boolean?
+): PointLight
 	local light = Instance.new("PointLight")
 	light.Color = color
 	light.Range = range
