@@ -1,12 +1,13 @@
 [
-  {"name": "01_arrival", "pos": [0, 13, 190], "look": [0, 22, 100], "fov": 70, "focus": [0, 6, 140]},
-  {"name": "02_aerial", "pos": [60, 300, 380], "look": [0, 0, 20], "fov": 60, "focus": [0, 0, 0], "fog": 0.0009},
-  {"name": "03_plan", "pos": [0, 760, 1], "look": [0, 0, 0], "fov": 50, "focus": [0, 0, 0], "fog": 0.0},
-  {"name": "04_terrace", "pos": [0, 9, 56], "look": [0, 30, -8], "fov": 70, "focus": [0, 5, 20]},
-  {"name": "05_sanctuary_gate", "pos": [70, 10, 132], "look": [107, 4, 185], "fov": 70, "focus": [107, 4, 185]},
-  {"name": "06_sanctuary_inside", "pos": [91, 11, 160], "look": [112, 4, 194], "fov": 70, "focus": [107, 4, 185]},
-  {"name": "07_courtyard", "pos": [80, 9, -4], "look": [140, 4, -4], "fov": 70, "focus": [126, 2, -4]},
-  {"name": "08_west_street", "pos": [-80, 8, 6], "look": [-130, 6, 0], "fov": 70, "focus": [-110, 2, 0]},
-  {"name": "09_forest_gate", "pos": [0, 9, -70], "look": [0, 14, -110], "fov": 70, "focus": [0, 2, -104]},
-  {"name": "10_forest_inside", "pos": [-20, 8, -140], "look": [10, 4, -200], "fov": 70, "focus": [0, 2, -170]}
+  {"name": "01_plaza_overview", "pos": [40, 70, 150], "look": [0, 0, -20], "fov": 65, "focus": [0, 4, 0]},
+  {"name": "02_aerial", "pos": [0, 420, 330], "look": [0, 0, 0], "fov": 55, "focus": [0, 0, 0], "fog": 0.0004},
+  {"name": "03_plan", "pos": [0, 900, 1], "look": [0, 0, 0], "fov": 50, "focus": [0, 0, 0], "fog": 0.0},
+  {"name": "04_farm_entrance", "pos": [37.5, 7, -65], "look": [79, 4, -136.8], "fov": 70, "focus": [55, 3, -95]},
+  {"name": "05_farm_inside", "pos": [59.1, 14, -74.4], "look": [84, 3, -145.5], "fov": 70, "focus": [70, 3, -110]},
+  {"name": "06_slots_close", "pos": [59.1, 6, -118.3], "look": [62.3, 5, -141.8], "fov": 70, "focus": [62, 4, -135]},
+  {"name": "07_crate_pads", "pos": [71.05, 7, -79], "look": [96.9, 2, -91.8], "fov": 70, "focus": [92, 2, -95]},
+  {"name": "08_sell_stand", "pos": [0, 9, 45], "look": [0, 6, 0], "fov": 70, "focus": [0, 4, 0]},
+  {"name": "09_crate_shop", "pos": [0, 8, -30], "look": [0, 6, -65], "fov": 70, "focus": [0, 4, -56]},
+  {"name": "10_upgrade_shop", "pos": [10, 8, 25], "look": [0, 6, 65], "fov": 70, "focus": [0, 4, 57]},
+  {"name": "11_farm_full", "pos": [-31.5, 30, -54.5], "look": [-79, 0, -136.8], "fov": 70, "focus": [-79, 3, -136.8]}
 ]

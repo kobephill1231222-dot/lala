@@ -1,16 +1,20 @@
 --!nonstrict
--- Guided introduction: a step card at the top of the screen and a glowing beam + marker that
--- lead the player to each target (well, altar, empty spot, shop, forest gate).
+-- Guided first loop: a step card at the top of the screen and a glowing beam + marker that
+-- lead the player to each target (Crate Pad, slot, Orb Box, Sell Stand, Crate Shop, Upgrade
+-- Shop). After the tutorial the same pointer guides "Walk me there" requests, and a light
+-- beam points to the Sell Stand while you carry Cursed Orbs.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Layout = require(Shared.Config.MapLayout)
+local Crates = require(Shared.Config.Crates)
+local GameConfig = require(Shared.Config.GameConfig)
+local Layout = require(Shared.Config.FarmLayout)
 local Tutorial = require(Shared.Rules.Tutorial)
-local Banners = require(Shared.Config.Banners)
 local Economy = require(Shared.Rules.Economy)
+local Format = require(Shared.Util.Format)
 
 local UI = script.Parent.Parent.UI
 local UIKit = require(UI.UIKit)
@@ -32,37 +36,71 @@ local targetAttachment: Attachment
 local beam: Beam
 local playerAttachment: Attachment? = nil
 local marker: BillboardGui
+local markerLabel: TextLabel
 local shownStep = -1
+local adHoc: { position: Vector3, label: string, until_: number }? = nil
 
 local function targetPosition(target: string, profile: any): Vector3?
-	if target == "Well" and profile.plot then
-		return (Layout.plotFloorCFrame(profile.plot) * CFrame.new(Layout.WellOffset)).Position
-			+ Vector3.new(0, 3, 0)
-	elseif target == "Altar" then
-		return Layout.AltarPosition + Vector3.new(0, 4, 0)
-	elseif target == "Spot" and profile.plot then
-		for spot = 1, profile.unlockedSpots do
-			if not profile.spots[tostring(spot)] then
-				return (Layout.plotFloorCFrame(profile.plot) * Layout.spotLocalCFrame(spot)).Position
-					+ Vector3.new(0, 2, 0)
+	local state = registry.StateController
+	local farm = profile.farm
+	if target == "Pad" and farm then
+		for pad = 1, Economy.unlockedPads(profile) do
+			if state.crateOnPad(pad) then
+				return Layout.padWorld(farm, pad).Position + Vector3.new(0, 3, 0)
 			end
 		end
-		return (Layout.plotFloorCFrame(profile.plot) * CFrame.new(Layout.WellOffset)).Position
-	elseif target == "Shop" then
-		return Layout.ShopCounter + Vector3.new(0, 4, 0)
-	elseif target == "Forest" then
-		return Layout.ForestGate + Vector3.new(0, 5, -16)
+		local pad = state.firstEmptyPad() or 1
+		return Layout.padWorld(farm, pad).Position + Vector3.new(0, 2, 0)
+	elseif target == "Slot" and farm then
+		local slot = state.firstEmptySlot() or 1
+		return Layout.slotWorld(farm, slot).Position + Vector3.new(0, 2, 0)
+	elseif target == "Box" and farm then
+		return (Layout.farmFloor(farm) * CFrame.new(Layout.CollectPoint)).Position + Vector3.new(0, 2, 0)
+	elseif target == "Sell" then
+		return Layout.SellStand + Vector3.new(0, 3, 0)
+	elseif target == "CrateShop" then
+		return Layout.CrateShop + Vector3.new(0, 4, 8)
+	elseif target == "UpgradeShop" then
+		return Layout.UpgradeShop + Vector3.new(0, 4, -8)
 	end
 	return nil
 end
 
 local function hintFor(step: any, profile: any): string
-	if step.event == "summon" and profile.energy < Banners.ById.lantern.cost then
-		return "Collect more energy from your Spirit Well first (50 needed)."
+	local state = registry.StateController
+	if step.event == "openCrate" then
+		for pad = 1, Economy.unlockedPads(profile) do
+			local _, crate = state.crateOnPad(pad)
+			if crate then
+				local remaining = crate.readyAt - state.now()
+				if remaining > 0 then
+					return "Opening Time: "
+						.. Format.clock(remaining)
+						.. ". When it's ready, press Open on the crate."
+				end
+				return "Your crate is ready! Walk up to it and press Open."
+			end
+		end
+	elseif step.event == "collect" then
+		local orbs = state.box()
+		if orbs < 1 then
+			return "Watch your Sorcerer make Cursed Orbs. They roll down the lane into your Orb Box."
+		end
+	elseif step.event == "buyCrate" then
+		local price = (Crates.get("basic") :: any).price
+		if profile.cash < price then
+			return string.format(
+				"Collect and Sell more Cursed Orbs until you have %s for a Basic Crate.",
+				Format.cash(price)
+			)
+		end
 	elseif step.event == "upgrade" then
-		local cost = Economy.upgradeCost("production", profile.upgrades.production or 0) or 0
-		if profile.energy < cost then
-			return "Collect energy until you can afford Focus Training (" .. cost .. ")."
+		local cost = Economy.upgradeCost("orbValue", Economy.upgradeLevel(profile, "orbValue")) or 0
+		if profile.cash < cost then
+			return string.format(
+				"Earn %s, then visit the Upgrade Shop and Upgrade Orb Value.",
+				Format.cash(cost)
+			)
 		end
 	end
 	return step.text
@@ -84,7 +122,52 @@ local function ensurePlayerAttachment(): Attachment?
 	return playerAttachment
 end
 
-local function refresh()
+local function pointTo(position: Vector3?, labelText: string?, subtle: boolean?)
+	if not position then
+		beam.Enabled = false
+		marker.Enabled = false
+		return
+	end
+	targetPart.Position = position
+	local attachment = ensurePlayerAttachment()
+	beam.Attachment0 = attachment
+	beam.Enabled = attachment ~= nil
+	beam.Transparency = if subtle
+		then NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 0.85) })
+		else NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.2),
+			NumberSequenceKeypoint.new(1, 0.6),
+		})
+	marker.Enabled = not subtle
+	markerLabel.Text = labelText or ""
+end
+
+local function distanceTo(position: Vector3): number
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return math.huge
+	end
+	local d = root.Position - position
+	return Vector3.new(d.X, 0, d.Z).Magnitude
+end
+
+-- Point the player at somewhere (until they get there, or a minute passes).
+function TutorialController.pointAt(position: Vector3, labelText: string)
+	adHoc = { position = position, label = labelText, until_ = os.clock() + 60 }
+	TutorialController.refresh()
+end
+
+local LABELS = {
+	Pad = "Crate Pad",
+	Slot = "Slot",
+	Box = "Orb Box",
+	Sell = "Sell Stand",
+	CrateShop = "Crate Shop",
+	UpgradeShop = "Upgrade Shop",
+}
+
+function TutorialController.refresh()
 	local profile = registry.StateController.profile
 	if not profile then
 		return
@@ -92,8 +175,16 @@ local function refresh()
 	local step = Tutorial.current(profile)
 	if not step then
 		card.Visible = false
-		beam.Enabled = false
-		marker.Enabled = false
+		if adHoc and (os.clock() > adHoc.until_ or distanceTo(adHoc.position) < 14) then
+			adHoc = nil
+		end
+		if adHoc then
+			pointTo(adHoc.position, adHoc.label)
+		elseif profile.carried.orbs >= 1 and distanceTo(Layout.SellStand) > GameConfig.SellRange then
+			pointTo(Layout.SellStand + Vector3.new(0, 3, 0), "Sell Stand", true)
+		else
+			pointTo(nil)
+		end
 		return
 	end
 	if shownStep ~= profile.tutorial then
@@ -116,23 +207,21 @@ local function refresh()
 			elseif i == profile.tutorial then Theme.Gold
 			else Theme.PanelLighter
 	end
-	-- When summoning is next but the player is broke, point back at the well.
 	local target = step.target
-	if step.event == "summon" and profile.energy < Banners.ById.lantern.cost then
-		target = "Well"
+	-- Need Cash for the shop steps? Point back at the Orb Box first.
+	if
+		step.event == "buyCrate"
+		and profile.cash < (Crates.get("basic") :: any).price
+		and profile.carried.orbs < 1
+	then
+		target = "Box"
+	elseif step.event == "buyCrate" and profile.cash < (Crates.get("basic") :: any).price then
+		target = "Sell"
 	end
-	local position = targetPosition(target, profile)
-	if position then
-		targetPart.Position = position
-		local attachment = ensurePlayerAttachment()
-		beam.Attachment0 = attachment
-		beam.Enabled = attachment ~= nil
-		marker.Enabled = true
-	else
-		beam.Enabled = false
-		marker.Enabled = false
-	end
+	pointTo(targetPosition(target, profile), LABELS[target])
 end
+
+local refresh = TutorialController.refresh
 
 function TutorialController.init(reg: any)
 	registry = reg
@@ -246,7 +335,7 @@ function TutorialController.init(reg: any)
 		Name = "TutorialMarker",
 		Adornee = targetPart,
 		Size = UDim2.fromOffset(70, 80),
-		StudsOffsetWorldSpace = Vector3.new(0, 4, 0),
+		StudsOffsetWorldSpace = Vector3.new(0, 5, 0),
 		AlwaysOnTop = true,
 		LightInfluence = 0,
 		Enabled = false,
@@ -262,6 +351,18 @@ function TutorialController.init(reg: any)
 		BackgroundColor3 = Theme.Gold,
 		UIKit.corner(6),
 		UIKit.stroke(Color3.new(1, 1, 1), 2, 0.2),
+	})
+	markerLabel = UIKit.text({
+		Parent = marker,
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 0, -2),
+		Size = UDim2.fromOffset(200, 24),
+		Text = "",
+		FontFace = Theme.TitleBold,
+		TextSize = 20,
+		TextColor3 = Theme.Gold,
+		TextStrokeTransparency = 0.3,
+		TextXAlignment = Enum.TextXAlignment.Center,
 	})
 	task.spawn(function()
 		while true do
@@ -282,7 +383,7 @@ function TutorialController.start()
 	local elapsed = 0
 	RunService.Heartbeat:Connect(function(dt)
 		elapsed += dt
-		if elapsed > 1 then
+		if elapsed > 0.5 then
 			elapsed = 0
 			refresh()
 		end

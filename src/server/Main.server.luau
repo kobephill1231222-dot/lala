@@ -13,21 +13,17 @@ local registry = {
 	Remotes = Net.createServer(),
 	DataService = require(Services.DataService),
 	StateService = require(Services.StateService),
-	PlotService = require(Services.PlotService),
+	FarmService = require(Services.FarmService),
 	GameService = require(Services.GameService),
-	TravelService = require(Services.TravelService),
-	CombatService = require(Services.CombatService),
 }
 
-for _, name in { "StateService", "PlotService", "GameService", "TravelService", "CombatService" } do
+for _, name in { "StateService", "FarmService", "GameService" } do
 	registry[name].init(registry)
 end
 
 -- Order matters: everything listening to DataService.Loaded must be connected before
 -- DataService starts loading players.
-registry.PlotService.start()
+registry.FarmService.start()
 registry.StateService.start()
 registry.GameService.start()
-registry.TravelService.start()
-registry.CombatService.start()
 registry.DataService.start()

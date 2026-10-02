@@ -1,83 +1,77 @@
 --!strict
--- Rarity tiers. Every per-rarity tuning number lives here so balance changes stay in one place.
+-- Rarity tiers. All per-rarity tuning lives here.
 
 export type RarityInfo = {
 	id: string,
 	rank: number,
-	displayName: string,
 	color: Color3,
 	glow: Color3,
 	maxLevel: number,
-	trainBase: number, -- energy cost to go from level 1 -> 2
-	trainGrowth: number, -- cost multiplier per level
-	releaseValue: number, -- energy refunded per level when releasing a unit
-	auraRate: number, -- particle rate used by visual auras
+	upgradeBase: number, -- Cash to go from level 1 -> 2
+	upgradeGrowth: number, -- cost multiplier per level
+	sellValue: number, -- Cash for selling a level-1 sorcerer
+	auraRate: number, -- particle rate of the placed sorcerer's aura
 }
 
 local Rarities = {}
 
-Rarities.Order = { "Common", "Rare", "Epic", "Legendary", "Mythic" }
+Rarities.Order = { "Common", "Uncommon", "Rare", "Epic", "Legendary" }
 
 Rarities.Info = {
 	Common = {
 		id = "Common",
 		rank = 1,
-		displayName = "Common",
-		color = Color3.fromRGB(178, 174, 190),
-		glow = Color3.fromRGB(214, 210, 226),
+		color = Color3.fromRGB(190, 190, 200),
+		glow = Color3.fromRGB(230, 230, 240),
 		maxLevel = 10,
-		trainBase = 20,
-		trainGrowth = 1.32,
-		releaseValue = 8,
+		upgradeBase = 15,
+		upgradeGrowth = 1.35,
+		sellValue = 10,
 		auraRate = 0,
+	},
+	Uncommon = {
+		id = "Uncommon",
+		rank = 2,
+		color = Color3.fromRGB(90, 210, 110),
+		glow = Color3.fromRGB(160, 245, 170),
+		maxLevel = 15,
+		upgradeBase = 60,
+		upgradeGrowth = 1.33,
+		sellValue = 40,
+		auraRate = 2,
 	},
 	Rare = {
 		id = "Rare",
-		rank = 2,
-		displayName = "Rare",
-		color = Color3.fromRGB(84, 168, 255),
-		glow = Color3.fromRGB(140, 200, 255),
-		maxLevel = 15,
-		trainBase = 90,
-		trainGrowth = 1.3,
-		releaseValue = 40,
-		auraRate = 3,
+		rank = 3,
+		color = Color3.fromRGB(70, 160, 255),
+		glow = Color3.fromRGB(150, 205, 255),
+		maxLevel = 20,
+		upgradeBase = 400,
+		upgradeGrowth = 1.3,
+		sellValue = 300,
+		auraRate = 4,
 	},
 	Epic = {
 		id = "Epic",
-		rank = 3,
-		displayName = "Epic",
-		color = Color3.fromRGB(176, 104, 255),
-		glow = Color3.fromRGB(206, 160, 255),
-		maxLevel = 20,
-		trainBase = 450,
-		trainGrowth = 1.28,
-		releaseValue = 250,
-		auraRate = 6,
+		rank = 4,
+		color = Color3.fromRGB(180, 100, 255),
+		glow = Color3.fromRGB(215, 170, 255),
+		maxLevel = 25,
+		upgradeBase = 4000,
+		upgradeGrowth = 1.28,
+		sellValue = 4000,
+		auraRate = 8,
 	},
 	Legendary = {
 		id = "Legendary",
-		rank = 4,
-		displayName = "Legendary",
-		color = Color3.fromRGB(255, 186, 64),
-		glow = Color3.fromRGB(255, 220, 140),
-		maxLevel = 25,
-		trainBase = 2600,
-		trainGrowth = 1.26,
-		releaseValue = 1500,
-		auraRate = 10,
-	},
-	Mythic = {
-		id = "Mythic",
 		rank = 5,
-		displayName = "Mythic",
-		color = Color3.fromRGB(255, 72, 126),
-		glow = Color3.fromRGB(255, 150, 190),
+		color = Color3.fromRGB(255, 190, 60),
+		glow = Color3.fromRGB(255, 225, 150),
 		maxLevel = 30,
-		trainBase = 12000,
-		trainGrowth = 1.25,
-		releaseValue = 8000,
-		auraRate = 16,
+		upgradeBase = 50000,
+		upgradeGrowth = 1.26,
+		sellValue = 60000,
+		auraRate = 14,
 	},
 } :: { [string]: RarityInfo }
 

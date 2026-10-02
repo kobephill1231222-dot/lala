@@ -1,6 +1,9 @@
 --!nonstrict
 -- Sound toggles, tutorial controls and a reminder of the controls.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Tutorial = require(ReplicatedStorage:WaitForChild("Shared").Rules.Tutorial)
 local UIKit = require(script.Parent.Parent.UIKit)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -82,38 +85,11 @@ function SettingsPanel.create(registry: any)
 		end,
 	})
 
-	local introRow = new("Frame", {
-		Parent = list,
-		LayoutOrder = 4,
-		Size = UDim2.new(1, 0, 0, 50),
-		BackgroundColor3 = Theme.PanelLight,
-		UIKit.corner(12),
-	})
-	UIKit.text({
-		Parent = introRow,
-		Position = UDim2.fromOffset(16, 0),
-		Size = UDim2.new(1, -180, 1, 0),
-		Text = "Village flyover",
-		FontFace = Theme.BodyBold,
-		TextSize = 17,
-	})
-	UIKit.button({
-		parent = introRow,
-		text = "Replay",
-		style = "secondary",
-		size = UDim2.fromOffset(130, 36),
-		position = UDim2.new(1, -142, 0.5, -18),
-		onClick = function()
-			ui.close(true)
-			registry.IntroController.play()
-		end,
-	})
-
 	UIKit.text({
 		Parent = list,
 		LayoutOrder = 5,
 		Size = UDim2.new(1, 0, 0, 130),
-		Text = "<b>Controls</b>\nWalk into your Spirit Well to collect.  E: interact\nF Summon  -  G Allies  -  U Upgrades  -  T Travel\nIn the forest: click or 1 Strike, 2 Lance, 3 Burst\nOn touch screens use the on-screen buttons.",
+		Text = "<b>Controls</b>\nE: Buy, Open, Place, Collect, Sell (walk up to things)\nR: Pick Up    G: Sorcerers    C: Crates    H: Go to Your Farm\nStep on your Collect Pad or the Sell Stand to Collect or Sell.\nOn touch screens, tap the on-screen prompts and buttons.",
 		TextColor3 = Theme.TextDim,
 		TextSize = 14,
 		TextYAlignment = Enum.TextYAlignment.Top,
@@ -128,7 +104,7 @@ function SettingsPanel.create(registry: any)
 			local on = profile.settings[key]
 			UIKit.setText(button, if on then "On" else "Off")
 		end
-		local active = profile.tutorial <= 5
+		local active = profile.tutorial < Tutorial.Done
 		UIKit.setEnabled(skip, active)
 		UIKit.setText(skip, if active then "Skip" else "Completed")
 	end

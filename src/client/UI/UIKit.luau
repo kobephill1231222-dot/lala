@@ -5,9 +5,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Characters = require(Shared.Config.Characters)
+local Sorcerers = require(Shared.Config.Sorcerers)
+local Crates = require(Shared.Config.Crates)
 local Rarities = require(Shared.Config.Rarities)
 local CharacterModels = require(Shared.Visuals.CharacterModels)
+local CrateModels = require(Shared.Visuals.CrateModels)
 local Theme = require(script.Parent.Theme)
 
 local UIKit = {}
@@ -120,6 +122,8 @@ end
 local BUTTON_STYLES = {
 	primary = { Theme.Violet, Theme.VioletDark, Theme.Text },
 	gold = { Theme.Gold, Theme.GoldDark, Color3.fromRGB(40, 24, 10) },
+	cash = { Theme.Cash, Theme.CashDark, Color3.fromRGB(10, 36, 16) },
+	red = { Theme.Red, Theme.RedDark, Theme.Text },
 	secondary = { Theme.PanelLighter, Theme.PanelLight, Theme.Text },
 	danger = { Color3.fromRGB(220, 80, 96), Color3.fromRGB(140, 40, 56), Theme.Text },
 	seal = { Theme.Seal, Color3.fromRGB(150, 30, 60), Theme.Text },
@@ -225,57 +229,85 @@ function UIKit.button(props: {
 	return button
 end
 
--- Currency glyphs drawn from frames so they never depend on font coverage.
-function UIKit.energyIcon(size: number): Frame
+-- Icons drawn from frames so they never depend on font coverage or uploaded images.
+function UIKit.cashIcon(size: number): Frame
 	local holder = new("Frame", { Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1 })
 	new("Frame", {
 		Parent = holder,
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(0.64, 0.64),
-		Rotation = 45,
-		BackgroundColor3 = Theme.Violet,
-		UIKit.corner(math.max(2, size // 8)),
-		UIKit.gradient(Color3.fromRGB(230, 200, 255), Theme.Violet, 45),
-		UIKit.stroke(Color3.fromRGB(255, 255, 255), 1.2, 0.3),
+		Size = UDim2.fromScale(0.86, 0.86),
+		BackgroundColor3 = Theme.Gold,
+		UIKit.round(),
+		UIKit.gradient(Color3.fromRGB(255, 236, 160), Theme.GoldDark, 45),
+		UIKit.stroke(Color3.fromRGB(255, 250, 220), 1.5, 0.2),
 	})
-	new("Frame", {
+	UIKit.text({
 		Parent = holder,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(0.2, 0.2),
-		Rotation = 45,
-		BackgroundColor3 = Color3.new(1, 1, 1),
+		Size = UDim2.fromScale(1, 1),
+		Text = "$",
+		FontFace = Theme.Heavy,
+		TextSize = math.floor(size * 0.6),
+		TextColor3 = Color3.fromRGB(110, 60, 10),
+		TextXAlignment = Enum.TextXAlignment.Center,
 	})
 	return holder
 end
 
-function UIKit.sealIcon(size: number): Frame
+function UIKit.orbIcon(size: number, color: Color3?): Frame
 	local holder = new("Frame", { Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1 })
+	local c = color or Theme.Violet
 	new("Frame", {
 		Parent = holder,
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromScale(0.8, 0.8),
-		BackgroundColor3 = Theme.Seal,
+		BackgroundColor3 = c,
 		UIKit.round(),
-		UIKit.gradient(Color3.fromRGB(255, 150, 160), Theme.Seal, 45),
-		UIKit.stroke(Color3.fromRGB(255, 230, 230), 1.2, 0.2),
+		UIKit.gradient(c:Lerp(Color3.new(1, 1, 1), 0.6), c, 45),
+		UIKit.stroke(Color3.new(1, 1, 1), 1.2, 0.4),
 	})
 	new("Frame", {
 		Parent = holder,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(0.42, 0.42),
-		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.3, 0.26),
+		Size = UDim2.fromScale(0.2, 0.2),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 0.2,
 		UIKit.round(),
-		UIKit.stroke(Color3.fromRGB(255, 240, 240), 2, 0),
 	})
 	return holder
 end
 
-function UIKit.currencyIcon(currency: string, size: number): Frame
-	return if currency == "seals" then UIKit.sealIcon(size) else UIKit.energyIcon(size)
+-- Small chest glyph in a crate tier's colours.
+function UIKit.crateIcon(tier: string, size: number): Frame
+	local def = Crates.get(tier)
+	local body = if def then def.body else Color3.fromRGB(110, 78, 54)
+	local trim = if def then def.color else Theme.Gold
+	local holder = new("Frame", { Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1 })
+	new("Frame", {
+		Parent = holder,
+		Position = UDim2.fromScale(0.08, 0.36),
+		Size = UDim2.fromScale(0.84, 0.56),
+		BackgroundColor3 = body,
+		UIKit.corner(3),
+		UIKit.stroke(trim, 2, 0),
+	})
+	new("Frame", {
+		Parent = holder,
+		Position = UDim2.fromScale(0.04, 0.14),
+		Size = UDim2.fromScale(0.92, 0.26),
+		BackgroundColor3 = body:Lerp(Color3.new(0, 0, 0), 0.15),
+		UIKit.corner(3),
+		UIKit.stroke(trim, 2, 0),
+	})
+	new("Frame", {
+		Parent = holder,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0.1),
+		Size = UDim2.fromScale(0.16, 0.6),
+		BackgroundColor3 = Color3.fromRGB(242, 232, 204),
+	})
+	return holder
 end
 
 function UIKit.rarityBadge(rarity: string, height: number?): Frame
@@ -341,7 +373,7 @@ function UIKit.viewport(
 		ImageColor3 = if opts.silhouette then Color3.new(0, 0, 0) else Color3.new(1, 1, 1),
 	})
 	local world = new("WorldModel", { Parent = viewport })
-	local def = Characters.get(characterId)
+	local def = Sorcerers.get(characterId)
 	if not def then
 		return viewport
 	end
@@ -361,13 +393,42 @@ function UIKit.viewport(
 		-- Orbit the camera (moving welded parts inside a viewport isn't reliable).
 		task.defer(function()
 			local angle = 0
-			while viewport.Parent do
+			local function alive(): boolean
+				local ok, parent = pcall(function()
+					return viewport.Parent
+				end)
+				return ok and parent ~= nil
+			end
+			while alive() do
 				angle += task.wait() * 0.5
 				local offset = Vector3.new(math.sin(angle * 0.8) * distance * 0.6, height * 0.18, distance)
 				camera.CFrame = CFrame.lookAt(focus + offset, focus)
 			end
 		end)
 	end
+	return viewport
+end
+
+-- A ViewportFrame showing a crate model.
+function UIKit.crateViewport(tier: string, size: UDim2): ViewportFrame
+	local viewport = new("ViewportFrame", {
+		Size = size,
+		BackgroundTransparency = 1,
+		Ambient = Color3.fromRGB(160, 150, 170),
+		LightColor = Color3.fromRGB(255, 240, 220),
+		LightDirection = Vector3.new(-0.6, -1, -0.8),
+	})
+	if not Crates.get(tier) then
+		return viewport
+	end
+	local world = new("WorldModel", { Parent = viewport })
+	local model = CrateModels.build(tier, CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(180 + 25), 0))
+	model.Parent = world
+	local h = CrateModels.heightOf(tier)
+	local camera = new("Camera", { FieldOfView = 30, Parent = viewport })
+	local focus = Vector3.new(0, h * 0.5, 0)
+	camera.CFrame = CFrame.lookAt(focus + Vector3.new(4, h * 0.9, 13.5), focus)
+	viewport.CurrentCamera = camera
 	return viewport
 end
 

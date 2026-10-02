@@ -1,42 +1,38 @@
 --!strict
--- General tuning constants that don't belong to a specific catalogue.
+-- General tuning constants.
 
 local GameConfig = {}
 
-GameConfig.GameName = "Cursebound Farm"
-GameConfig.DataStoreName = "CurseboundFarm_Profiles_v1"
+GameConfig.GameName = "JJK Farm"
+GameConfig.DataStoreName = "JJKFarm_Profiles_v1"
 GameConfig.DataVersion = 1
 
--- Sanctuary layout
-GameConfig.SpotCount = 10
-GameConfig.StartingSpots = 2
--- Energy cost to break the seal on each spot (index = spot number).
-GameConfig.SpotUnlockCosts = {
-	[3] = 120,
-	[4] = 500,
-	[5] = 1800,
-	[6] = 6000,
-	[7] = 25000,
-	[8] = 90000,
-	[9] = 300000,
-	[10] = 1000000,
-}
+-- Farm
+GameConfig.SlotCount = 10
+GameConfig.StartingSlots = 3
+GameConfig.PadCount = 4
+GameConfig.StartingPads = 2
+GameConfig.InventoryLimit = 60
+GameConfig.CrateLimit = 20
 
-GameConfig.InventoryLimit = 50
-
--- Spirit Well (where placed units deposit energy until collected)
-GameConfig.WellMinCapacity = 200
-GameConfig.WellBaseSeconds = 240
-GameConfig.WellSecondsPerLevel = 120
-GameConfig.WellStartingEnergy = 60
+-- Orb Box
+GameConfig.BoxBaseCapacity = 60 -- Cursed Orbs
+GameConfig.BoxGrowthPerLevel = 1.35
+-- Offline production is computed once when you return, for at most this long, and still
+-- can't exceed the Orb Box capacity.
 GameConfig.MaxOfflineSeconds = 8 * 60 * 60
 
--- Unit growth
-GameConfig.RatePerLevel = 0.25 -- +25% of base rate per level above 1
-GameConfig.PowerPerLevel = 0.2
-GameConfig.ProductionPerUpgrade = 0.1
-GameConfig.CombatPerUpgrade = 0.15
-GameConfig.TeamPowerDivisor = 40 -- damage multiplier = 1 + teamPower / divisor
+-- Growth
+GameConfig.OrbValuePerLevel = 0.2 -- sorcerer level: +20% Orb Value per level above 1
+GameConfig.OrbValuePerUpgrade = 0.1 -- farm upgrade: +10% per level
+GameConfig.OpenSpeedPerLevel = 0.06
+GameConfig.BaseWalkSpeed = 20
+GameConfig.WalkSpeedPerLevel = 2
+
+-- Interaction ranges (studs), checked on the server
+GameConfig.CollectRange = 22
+GameConfig.SellRange = 26
+GameConfig.ShopRange = 40
 
 -- Persistence
 GameConfig.AutosaveInterval = 90
@@ -44,8 +40,5 @@ GameConfig.SessionLockStaleSeconds = 300
 GameConfig.LoadRetries = 5
 GameConfig.LoadRetryDelay = 3
 GameConfig.SaveRetries = 4
-
--- Travel
-GameConfig.TravelCooldown = 2.5
 
 return GameConfig

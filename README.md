@@ -1,167 +1,225 @@
-# Cursebound Farm
+# JJK Farm
 
-A Roblox anime farming game set in a moody Japanese supernatural village at dusk. Collect
-original sorcerers and spirits, put them to work on training spots in your sanctuary, gather
-the cursed energy they produce, and spend it on rituals, upgrades and new spots. Then cleanse
-the Cursed Forest for extra energy and Curse Seals.
+A Roblox character-production farm with a Jujutsu Kaisen-inspired theme, built around the
+farming loop of [Blue Lock Farm](https://www.roblox.com/games/132767904294856/Blue-Lock-Farm):
+open Crates to get Sorcerers, place them on Your Farm, watch them make Cursed Orbs that roll
+down a lane into your Orb Box, collect the box, sell it for Cash, and reinvest.
 
-All characters, names, designs, abilities and branding are original. No anime assets,
-Toolbox models or third-party code are used; every model is built from Roblox primitives by
-the scripts in this repo.
+All names, characters, designs and techniques are original. There are no anime assets,
+Toolbox models or third-party code. Every model is built from Roblox primitives by the
+scripts in this repo.
 
-![Arrival view](docs/previews/arrival.jpg)
+![Your Farm](docs/previews/05_farm_inside.jpg)
 
-> The images in this README are **offline previews** rendered from the baked map geometry
-> with three.js (see *Verification*). They approximate Roblox's lighting; the real game will
-> look different, usually brighter and with proper materials, in Studio.
+> **Studio status: I had no Roblox Studio connection.** This was built in a cloud container
+> without Studio, so **no checks ran in Roblox Studio**. The handoff is the place file
+> **[`dist/JJKFarm.rbxl`](dist/JJKFarm.rbxl)**, which contains the whole map, lighting and every
+> script. Everything was verified offline instead (see *Verification*). The images here are
+> three.js renders of the baked geometry, not Roblox screenshots. UI text and particles
+> aren't drawn in them.
 
 ---
 
-## Quick start (play it in Studio)
+## Play it in Studio
 
-1. Open **`dist/CurseboundFarm.rbxl`** in Roblox Studio (double-click it, or File > Open).
-2. Press **Play**. On first start the server generates the terrain (about 1 second), then you
-   arrive at the plaza facing the spirit tree, after a short flyover.
-3. The tutorial card at the top walks you through: **collect, summon, place, upgrade, fight**.
+1. Open **`dist/JJKFarm.rbxl`** in Roblox Studio (double-click it, or File > Open).
+2. Press **Play**. You spawn at Your Farm. A card at the top of the screen walks you through
+   the loop, and a glowing beam points to each next stop.
 
-To make progress save while testing in Studio, publish the place, then enable
-**Game Settings > Security > Enable Studio Access to API Services**. Without it, the game runs
-in a temporary in-memory mode and tells you so with a toast. It never writes fake data.
+Saving in Studio: publish the place, then turn on **Game Settings > Security > Enable Studio
+Access to API Services**. Without it the game runs on a temporary in-memory store and says so
+in a toast. It never writes fake data.
 
 Before publishing for real players:
 
-- **Server size: set Max Players to 6** (Creator Dashboard > your experience > Places >
-  Server Size). There are six sanctuaries per server. A seventh player can still play but gets
-  a toast saying no sanctuary is free.
-- Optional: bake terrain into the place (see *Terrain* below) so servers skip generating it.
+- **Set Max Players to 6** (Creator Dashboard > your experience > Places > Server Size).
+  Each server has six farms. A seventh player can walk around but gets a toast that every
+  farm is taken.
 - Optional: add music and ambient audio IDs (see *Sound*).
 
-## The game
+## The loop
 
-| Loop step | Where | What happens |
-|---|---|---|
-| Collect | Your sanctuary's **Spirit Well** | Placed units fill the well every second. Walk into it, press **E**, or tap the HUD well card. Energy keeps accruing while you're offline, up to the well's capacity. |
-| Summon | **Summoning Courtyard** (east) | Three rituals: Lantern (energy), Greater (energy, Rare or better), Sealed (Curse Seals, Epic or better). Pity guarantees a Legendary or better within 80 rituals. Your first-ever ritual is a guaranteed Rare. |
-| Place | Your sanctuary | Ten training spots ring the well (two open at the start). Use the Allies panel or a spot's prompt; a ghost preview shows exactly where the unit goes. Moving a unit between spots swaps it with the occupant; placing a resting unit onto an occupied spot sends the occupant back to your roster. |
-| Upgrade | **Talisman Shop** (west), or the HUD | Focus Training (+10% output), Deeper Well (+2 min capacity), Combat Mastery (+15% damage), Ritual Fortune (better odds), Expand Sanctuary (break the next spot's seal). Units also level up individually ("Train"). |
-| Fight | **Cursed Forest** (north) | Three techniques (Strike, Spirit Lance, Violet Burst) against Gloomlings, Wailing Masks and the Hollow Brute. Rewards scale with your income; every player who did a meaningful share of the damage is rewarded. Practise on the Dojo dummies. |
+| # | Step | Where | What you do |
+|---|---|---|---|
+| 1 | Get a Crate | Start | New players get a free **Starter Crate**. |
+| 2 | **Place** it, wait, **Open** | Your Farm's **Crate Pads** (front-left) | Press **Place** at an empty pad. A timer above the crate counts down its **Opening Time**, which keeps running while you're offline. When it says READY, press **Open**. |
+| 3 | Reveal | On the pad | The crate shakes harder and harder, glows in the colour of what's inside, then the lid bursts off in a pillar of light. A card shows the **Sorcerer**, its rarity, technique, **Orb Value** and **Orbs per Second**. |
+| 4 | **Place** the Sorcerer | A production slot | Press **Place** on the card (or at an empty slot). A translucent preview shows where it goes. |
+| 5 | Production | The slot and the lane | Each Sorcerer performs its technique (Punch, Slash, Cast or Shoot) and makes a **Cursed Orb** in its technique's colour. The orb arcs over the slot's chute into the **collection lane**, rides the moving lane and drops into the **Orb Box**. The glowing pile inside the box rises and turns gold when the box is full. A full box stops production until you collect it. |
+| 6 | **Collect** | The **Collect Pad** in front of the Orb Box | Step on the pad or press **Collect**. Your character carries a glowing box labelled with the orb count. |
+| 7 | **Sell** | The **Sell Stand** in the middle of the plaza | Step on the gold pad or press **Sell**. Coins burst out and the Cash lands on your counter. |
+| 8 | Reinvest | **Crate Shop** (north), **Upgrade Shop** (south), Sorcerers menu | **Buy** better crates, **Upgrade** Sorcerers (more Orb Value per level), and buy farm upgrades: Orb Value, More Slots (3 -> 10), Box Size, Opening Speed, More Crate Pads (2 -> 4), Luck and Walk Speed. |
 
-**Units**: 14 originals across Common, Rare, Epic, Legendary and Mythic, including Tomo the
-Lantern Wisp, Suzu Amane the Bell Warden, Kagerou the Hollow Mask, Ikazuchi the Thunder Cub,
-Yoru Mikazuki the Veiled Sovereign and Kokuyo the Obsidian Maw. Each has an output rate, a
-power stat (placed units' power boosts your combat damage), a max level and its own model.
+Production is visible at all times. The HUD shows Cash, Cash per second, Orbs per Second and
+the Orb Box fill, but the lane, the box and the carried orbs show the same numbers in the
+world. Each farm also has a stats board, and the box has a live counter over it.
 
-![Units](docs/previews/units_2.jpg)
+### Names used everywhere
 
-**Pacing**: the first upgrade is affordable straight after placing your first summon (the
-tutorial grants a small bonus). A simulation of an efficient player is in
-`tools/lune/simulate.luau`: spot 3 after about 1 minute, spot 5 at about 6 minutes, spot 8 at
-about 35 minutes, and a long tail beyond.
+Game **JJK Farm**, currency **Cash**, containers **Crates**, characters **Sorcerers**,
+products **Cursed Orbs**, collection containers **Orb Boxes**, player area **Your Farm**,
+shops **Crate Shop** and **Upgrade Shop**. Buttons and prompts use **Buy, Open, Place,
+Pick Up, Collect, Sell, Upgrade**. Stats are **Orb Value, Orbs per Second, Opening Time**.
+Rarities are **Common, Uncommon, Rare, Epic, Legendary**. The same words appear in the UI,
+world signs, prompts, the tutorial and notifications. (The only extra prompt word is
+"Browse", which opens the Crate Shop catalogue.)
 
 ### Controls
 
 | | Keyboard / mouse | Touch | Gamepad |
 |---|---|---|---|
-| Interact (collect, summon, shop, spots) | E | prompt button | X |
-| Panels | F Summon, G Allies, U Upgrades, T Travel | HUD buttons | via HUD |
-| Techniques (forest / dojo) | Click or 1, then 2, 3 | on-screen buttons (auto-aim at the nearest curse) | X / Y / R2 |
-| Placement | hover and click a glowing spot | tap a spot, then **Confirm** | RB cycles spots, A confirms |
-| Close panel | Esc | tap outside | B |
+| Buy / Open / Place / Collect / Sell / Upgrade | **E** at the prompt | Tap the prompt | X |
+| Pick Up (Sorcerer or Crate) | **R** at the prompt | Tap the prompt | Y |
+| Placement | Hover a glowing slot or pad and click it | Tap a target, then **Place** | D-pad, then A |
+| Sorcerers / Crates / Crate Shop / Upgrade Shop / Home | G / C / B / U / H | Right-side buttons | |
+
+You can also just walk: the Collect Pad collects and the Sell Stand sells when you step on them.
+
+## Sorcerers and Crates
+
+15 original Sorcerers, three per rarity. Each has its own model, colours, technique and
+technique animation, and some bring a companion spirit (toad, wolf, moth, mask or serpent).
+They stand 1.35 times avatar height on the farm so you can read them from the path.
+
+| Rarity | Sorcerers (technique) | Orb Value at Lv 1 | Max level |
+|---|---|---|---|
+| Common | Kai (Spark Palm), Mina (Paper Seal), Toru (Toad Call) | $2-3 | 10 |
+| Uncommon | Rei (Ice Needle), Goro (Stone Fist), Hana (Petal Storm) | $5-8 | 15 |
+| Rare | Suzu (Bell Strike), Daiki (Thunder Kick), Nao (Moth Lantern) | $16-22 | 20 |
+| Epic | Ryo (Tide Slash), Emi (Star Arrow), Juzo (Mask Curse) | $55-90 | 25 |
+| Legendary | Akane (Crimson Blade), Shion (Moon Mirror), Yoru (Void Palm) | $200-260 | 30 |
+
+| Crate | Price | Opening Time | Odds (before Luck) |
+|---|---|---|---|
+| Starter Crate | free, once | 10 s | always Kai |
+| Basic Crate | $60 | 30 s | Common 75%, Uncommon 22%, Rare 3% |
+| Rare Crate | $2,000 | 2 min | Common 20%, Uncommon 50%, Rare 27%, Epic 3% |
+| Epic Crate | $75,000 | 5 min | Uncommon 25%, Rare 50%, Epic 24%, Legendary 1% |
+| Legendary Crate | $2,500,000 | 10 min | Rare 35%, Epic 55%, Legendary 10% |
+
+![Sorcerers](docs/previews/20_sorcerers_front.jpg)
+![Crates](docs/previews/23_crates.jpg)
+
+**Pacing.** `tools/lune/simulate.luau` has a greedy bot play the real rules, including a
+walk to the Sell Stand for every sale. Its last run: tutorial finished at 1 min, 4 slots at
+5 min, first Epic at 22 min, 8 slots at 36 min, first Legendary at 71 min, all 10 slots at
+92 min. Real players will be slower than the bot. Balance lives in `src/shared/Config/`.
 
 ## The map
 
-The village is compact and laid out radially so the core loop stays short. Everything is
-within about a 15-second walk, and the **Travel** panel jumps between landmarks.
+![Aerial](docs/previews/02_aerial.jpg)
 
-![Aerial](docs/previews/aerial.jpg)
+A compact central plaza is ringed by six identical farms, each facing the plaza through its
+own torii gate. Every interaction is a short walk: about 6 seconds from a farm's Orb Box to
+the Sell Stand at default walk speed.
 
-- **Shrine island (centre):** the giant fractured spirit tree with glowing seams, orbiting
-  crystal shards, wisteria-like tassels and falling petals, plus a shrine hall, lion-dog
-  guardians, sub-shrines, an ema rack, and a moat crossed by four arched bridges.
-- **Arrival plaza (south):** a raised stone plaza. The view runs down a lantern-lined approach
-  through a tunnel of torii and the Great Torii to the tree. It includes a purification
-  pavilion, a teahouse and a koi pond.
-- **Summoning Courtyard (east):** a walled court with an inlaid ritual circle whose rings
-  rotate (and flare in the rarity colour when anyone summons), a rune stele, banners and
-  violet braziers.
-- **West district:** the Training Dojo with a practice yard and dummies, the Talisman Shop with
-  a tanuki shopkeeper, a five-storey pagoda on the skyline, a well and a merchant's cart.
-- **Cursed Forest (north):** entered through a giant broken torii. Twisted trees, ruined
-  shrines, spider lilies, glowing mushrooms, violet mist and wisps, walled in for focused
-  fights.
-- **Six sanctuaries** around the village, each with a torii gate and owner sign, a Spirit Well
-  with a floating crystal, sealed training spots, a shrine house, lanterns and a small garden.
-- **Village life:** a ring road with lanterns and signposts, winding paths to every
-  sanctuary, houses (laundry, barrels, benches), bamboo groves, pines and maples, a stream fed
-  by a waterfall spring, an old graveyard by the forest, fireflies, hills and distant
-  mountains.
+- **Plaza**: the **Sell Stand** pavilion in the middle (a spinning gold coin marks it from
+  every farm), the **Crate Shop** to the north with the four crates on display (walk up and
+  press **Buy**), and the **Upgrade Shop** to the south with its upgrade board. Paved paths
+  with stone lanterns lead to each farm gate.
+- **Your Farm** (100 x 120 studs): the entrance torii with the owner's name (you see "Your
+  Farm"), the Collect Pad and Orb Box straight ahead, four **Crate Pads** on the front-left,
+  ten production slots in two rows either side of the raised **collection lane**, a stats
+  board, and a pagoda, bamboo and sakura at the back for the skyline. Low hedges keep
+  sightlines clear across the whole farm.
+- **Scale**: built around a 5-stud avatar. Gates are 23 studs tall, shops have 13-stud walls,
+  slots are 12 x 12, crates are about avatar height, the Orb Box is 12 x 7 x 10.
+- **Lighting**: a clear early-afternoon sun (ClockTime 14.6), light haze, soft shadows and
+  gentle bloom so the neon orbs still glow. Future lighting.
+- No terrain: the ground, hills and mountains are parts, so the place looks the same in
+  Studio edit mode as in play.
 
 | | |
 |---|---|
-| ![Shrine](docs/previews/shrine_terrace.jpg) | ![Courtyard](docs/previews/summoning_courtyard.jpg) |
-| ![Sanctuary](docs/previews/sanctuary.jpg) | ![West](docs/previews/dojo_shop_pagoda.jpg) |
+| ![Plaza](docs/previews/01_plaza_overview.jpg) | ![Farm gate](docs/previews/04_farm_entrance.jpg) |
+| ![Slots and lane](docs/previews/06_slots_close.jpg) | ![Crate Pads](docs/previews/07_crate_pads.jpg) |
+| ![Sell Stand](docs/previews/08_sell_stand.jpg) | ![Crate Shop](docs/previews/09_crate_shop.jpg) |
 
-The palette is held to dark wood, weathered stone, warm lantern light and violet cursed
-energy (`src/server/Map/Palette.luau`). Lighting is a low dusk sun with violet haze, bloom so
-neon reads as glowing, and a colour grade. There are about 10.7k anchored parts and 89 point
-lights, with no unanchored scenery except the welded animated assemblies.
+The previews include a staged mid-game farm and blocky 5.2-stud avatar stand-ins for scale.
+In the game, Sorcerers, crates and orbs are added by the server and client at runtime.
+
+## Saving, offline progress and safety
+
+**Saved per player**: Cash, every Sorcerer and its level, which slot each one stands on, farm
+upgrades, every Crate (including which pad it's on and the **absolute time it finishes
+opening**, or the time left if you picked it up), the Orb Box contents and the time they were
+last settled, the orbs you're carrying, tutorial progress, settings and stats.
+
+**Offline progress** is calculated **once per absence**, when your profile loads:
+
+- Your Sorcerers' production since the box was last saved is added to the Orb Box. It is
+  capped at **8 hours** (`GameConfig.MaxOfflineSeconds`) **and** at the box's capacity,
+  so a bigger Box Size upgrade means more to come back to.
+- Crates keep opening because their finish time is stored, not a countdown.
+- The welcome-back toast reports the time away, the orbs made and the crates that finished.
+
+**Duplicate-claim protection**: the claim moves the Orb Box's timestamp to the load time,
+and that timestamp is what gets saved. A second join can only count time after it. Profiles
+are **session-locked** (UpdateAsync with a lock and job id), so two servers can't load the
+same profile at once. If a server dies before saving, the old timestamp is still in the
+store and nothing was paid out, so nothing is lost or doubled. Box timestamps from the future
+(clock skew) are clamped to now. The integration test leaves, rejoins after an hour, collects,
+then leaves and rejoins immediately, and checks that no second payout happens.
+
+**Server authority**: Cash, purchases, crate rolls, placements, production and sales are all
+computed on the server by pure rule functions (`src/shared/Rules/Actions.luau`). Clients only
+send requests. Every request is type-checked (integers, id formats, known crate and upgrade
+ids), rate-limited (8/s with a burst of 16, plus a separate limiter for the touch pads) and
+position-checked: you must be on Your Farm to place, pick up or open, within 22 studs of your
+Orb Box to Collect, at the Sell Stand to Sell, and at the right shop to Buy or Upgrade.
+Failed loads never fall back to a blank profile: the player is told to rejoin and the stored
+data is untouched. There is no paid monetization.
+
+## Reference research: what I could and couldn't check
+
+- I could **not** open the Roblox page or any wiki. Direct fetches of roblox.com and the fan
+  wikis were blocked by this environment's network proxy. **I didn't watch any gameplay
+  footage.** I can't access video here, so the physical layout of the original isn't copied
+  from footage.
+- What I could read were search-engine summaries of fan guides. Those describe the loop as:
+  buy lockers to get players, place them so they farm balls, collect and **sell full crates
+  for Cash**, keep earning while offline, and reinvest in better lockers and upgrades that
+  boost crate value, luck, opening speed, movement and base size. Sources:
+  [Blue Lock Farm Beginner Guide](https://blue-lock-farm-wiki.wiki/guides/beginner-guide),
+  [How to Open Lockers](https://blue-lock-farm-wiki.wiki/lockers/how-to-open-lockers),
+  [How to Get Money Fast](https://blue-lock-farm-wiki.wiki/earnings/money-guide),
+  [Blue Lock Farm Guide: Open Lockers to Earn Cash](https://bluelockfarm.buzz/),
+  [Blue Lock Farm Wiki](https://bluelockfarm.com/wiki/).
+- Mapped onto this game: lockers became **Crates** with an **Opening Time**, players became
+  **Sorcerers**, balls became **Cursed Orbs**, ball crates became the **Orb Box**. The
+  upgrades follow the same categories: Box Size, Luck, Opening Speed, Walk Speed, and More
+  Slots/Crate Pads for base size. Specific numbers, the lane, the farm layout and the plaza
+  are my own design, not taken from the original.
 
 ## Project layout
 
 ```
-default.project.json        Rojo project (code + place settings: Future lighting, no streaming)
-dist/CurseboundFarm.rbxl    Ready-to-open place: code + baked map + lighting
-src/shared/                 ReplicatedStorage.Shared
-  Config/                   Characters, Rarities, Banners, Upgrades, Enemies, Abilities,
-                            MapLayout (single source of truth for positions), SoundConfig
-  Rules/                    Pure game logic: Economy, Actions, ProfileSchema, Tutorial, CombatMath
-  Util/                     Format, Prng, RateLimiter, Signal, TableUtil
-  Visuals/                  PartKit, CharacterModels (14 units), CurseModels (3 curses)
-  Net.luau                  Remote definitions
-src/server/                 ServerScriptService.Server
-  Main.server.luau          Boots the world, wires and starts services
-  Services/                 DataService (+Data/ProfileStore, MockDataStore), StateService,
-                            PlotService, GameService (all requests), TravelService, CombatService,
-                            MapService
-  Map/                      MapBuilder, Shrine, Courtyard, WestDistrict, Forest, Sanctuary,
-                            Village, TerrainPlan, Atmosphere, Kit, Palette
-src/client/                 StarterPlayerScripts.Client
-  Main.client.luau          Creates controllers and panels
-  Controllers/              State, Sound, UI (HUD), World (prompts, travel), Effects, Reveal,
-                            Placement, Combat, Tutorial, Intro, Notification
-  UI/                       Theme, UIKit, Panels/ (Summon, Units, Upgrades, Travel, Settings)
-tests/                      Lune specs: rules, persistence, combat math + layout
-tools/lune/                 Offline tooling: bake, tests, simulation, playtests, model export
-tools/preview/              three.js preview renderer (development aid only)
-scripts/build.sh            Full build + checks
+default.project.json         Rojo project (Shared -> ReplicatedStorage, Server -> ServerScriptService,
+                             Client -> StarterPlayerScripts; Future lighting; walk speed 20)
+src/shared/Config/           GameConfig, Sorcerers, Crates, Rarities, Upgrades, FarmLayout, SoundConfig
+src/shared/Rules/            Economy (formulas), Actions (authoritative actions), ProfileSchema
+                             (shape, sanitizing, migration), Tutorial
+src/shared/Visuals/          CharacterModels (Sorcerers + companions), CrateModels, PartKit
+src/server/Services/         DataService (+ Data/ProfileStore, MockDataStore), StateService,
+                             FarmService (farms, models, carried box, spawning), GameService
+                             (requests, validation, touch pads), MapService
+src/server/Map/              MapBuilder, Plaza, Farm, Scenery, Kit (architecture/nature pieces),
+                             Palette, Atmosphere
+src/client/Controllers/      State, UI (HUD), World (prompts, labels), Production (techniques,
+                             orbs, lane, box fill), Effects, Reveal, Placement, Tutorial, Sound,
+                             Notification
+src/client/UI/               UIKit, Theme, Panels/ (Sorcerers, Crates, CrateShop, UpgradeShop, Settings)
+tests/                       rules.spec (economy, crates, box, offline, upgrades, tutorial), data.spec
+tools/lune/                  bake, test, integration, client_smoke, simulate, models + lib/ (sandbox,
+                             engine shim, preview staging)
+tools/preview/               three.js renderer for offline previews
+dist/JJKFarm.rbxl            the built place: map, lighting and all scripts
 ```
-
-### How it fits together
-
-- **Server-authoritative.** Clients only send intents through one `Request` RemoteFunction
-  and one `Ability` RemoteEvent. Every request is type-validated, rate-limited per player
-  (token bucket), and applied by the pure rule functions in `Shared/Rules/Actions.luau`.
-  Location-gated actions (collect, summon) check the character's position on the server.
-  Combat hit detection, cooldowns, zone checks and damage all run on the server; clients play
-  the VFX immediately for responsiveness.
-- **State replication:** `StateService` pushes a throttled snapshot of the owner's profile.
-  The client derives display numbers (rates, well fill) from the same shared `Economy` module,
-  and extrapolates the well with the synchronised server clock.
-- **Persistence:** `ProfileStore` is session-locked (`UpdateAsync`), retries with backoff, and
-  takes over a lock only when it is stale or after its final retry. A server that has lost
-  its lock can never write. A failed or corrupt load kicks the player with a friendly message
-  and **never** writes defaults over real data. Profiles are sanitised and migrated on load;
-  unknown units are preserved, not deleted. Saves happen on autosave (90s), on leave, and on
-  shutdown (`BindToClose`).
-- **Plots:** assigned on load and fully reset on leave (units, seals, sign, ward). Prompts for a
-  sanctuary are created only on its owner's client.
-- **World build:** structures are baked into the place file; `MapService` rebuilds them if
-  they're missing (e.g. a fresh `rojo serve`), and generates terrain at startup.
 
 ## Building from source
 
 Tools (pinned in `rokit.toml`): Rojo 7.5.1, Lune 0.10.4, StyLua 2.1.0, luau-lsp 1.53.1 and
-Selene 0.29.0. Install with [rokit](https://github.com/rojo-rbx/rokit) (`rokit install`).
+Selene 0.29.0. Install them with [rokit](https://github.com/rojo-rbx/rokit) (`rokit install`).
 
 ```bash
 scripts/build.sh                                      # build + bake + all tests
@@ -169,69 +227,43 @@ LUAU_DEFS=path/to/globalTypes.d.luau scripts/build.sh # also run type analysis
 PREVIEW=1 scripts/build.sh                            # also render previews (needs Node)
 ```
 
-Live-syncing code while editing in Studio: open `dist/CurseboundFarm.rbxl`, run `rojo serve`,
-and connect with the Rojo plugin. The map and lighting in the place are kept, because the project
-doesn't own those Workspace and Lighting children. `rojo build default.project.json` alone
-produces a code-only place; the server then generates the whole map at startup.
-
-### Terrain
-
-Terrain voxels can't be written offline, so the server generates them on startup (about 870
-fill operations). To bake terrain into the place so you can see and edit it in Studio, run this
-once in the **Command Bar** in edit mode, then save:
-
-```lua
-local MB = require(game.ServerScriptService.Server.Map.MapBuilder); MB.buildTerrain(workspace.Terrain); workspace.Terrain:SetAttribute("CurseboundTerrain", true)
-```
-
-### Tuning and content
-
-- Balance lives in `src/shared/Config/*` (rates, costs, odds, pity, enemy stats, unlock costs).
-  Re-run `lune run tools/lune/simulate.luau build/game.rbxl 120` to see the pacing.
-- New characters: add an entry to `Characters.luau` (choose a `look.template`: Sorcerer,
-  Lantern, Toad, Moth, Mask, Wolf or Serpent, and its colours and accessories). It appears in
-  rituals, the Index and placement automatically.
-- Map: positions come from `MapLayout.luau`; districts are separate modules under
-  `src/server/Map/`.
+To live-sync code while editing in Studio: open `dist/JJKFarm.rbxl`, run `rojo serve`, and
+connect with the Rojo plugin. The baked map and lighting stay, because the project doesn't own
+those Workspace and Lighting children. `rojo build default.project.json` alone gives a
+code-only place, and the server builds the map at startup.
 
 ### Sound
 
-Every sound is defined in `src/shared/Config/SoundConfig.luau`. The defaults use audio that
-ships with the Roblox client (`rbxasset://sounds/...`), so they always load without uploads
-or permissions, but there are only a handful of them, so the effects are basic. To improve
-the soundscape, put Creator Store audio IDs in the `id` fields. Music and the positional
-ambient beds (water, forest, shrine, courtyard, village) are silent until you add IDs.
+Sounds are defined in `src/shared/Config/SoundConfig.luau`. The defaults use audio that ships
+with the Roblox client (`rbxasset://sounds/...`), so they load without uploads or permissions,
+but there are only a few of them. Put Creator Store audio IDs in the `id` fields to improve
+them. Music is silent until you add an ID.
 
 ## Verification
 
-I couldn't run Roblox Studio here, so everything was verified offline instead:
+**Checks run in Roblox Studio: none.** I had no Studio connection. These checks ran offline
+in this environment, against the same scripts and the same baked place file:
 
 | Check | Result |
 |---|---|
 | `luau-lsp analyze` with Roblox type definitions over all of `src/` | 0 errors |
-| Unit tests (rules, persistence safety, combat math, layout) | 43 / 43 pass |
-| **Server playtest**: the real `Main.server.luau` running in a Lune engine shim against the baked place. Covers join, the whole tutorial, validation and rate limits, well accrual, curse spawning and kills, a second player, respawn at home, leave/save/release, rejoin with offline earnings, a failed-load kick without overwriting data, and shutdown saves. | 61 / 61 checks pass |
-| **Client smoke test**: the real client scripts, driving every panel and button, placement, every effect type, notifications, all tutorial steps, combat and the recruitment reveal | 17 / 17 steps pass |
-| Bake sanity checks (6 sanctuaries x 10 spots, wells, spawns, dummies, counter, altar, spawn point) | pass |
-| Map composition | reviewed from the spawn camera, aerial, plan and player-height previews |
+| Unit tests (economy, crates and odds, Orb Box, collect/sell, offline cap and once-only claim, upgrades, tutorial, profile repair, session-locked persistence) | 42 / 42 pass |
+| **Server playtest**: the real `Main.server.luau` in a Lune engine shim against `dist/JJKFarm.rbxl`, playing **Starter Crate -> Place -> Opening Time -> Open -> Place Sorcerer -> orbs fill the box -> Collect -> carry -> Sell -> Buy -> Upgrade** through the remotes. Also: touch pads, reinvesting (slots, pads, walk speed, Pick Up and re-place of a crate keeping its time, swaps, Sorcerer Upgrade, Pick Up), validation and rate limits, a second player who can't touch your farm, respawn at Your Farm, leave/save/release, offline progress paid once, a failed-load kick that leaves data untouched, and shutdown saves | 112 / 112 checks pass |
+| **Client smoke test**: the real client scripts with a stubbed engine. HUD, every prompt and its text, production (technique animations fire, orbs travel the lane, the box fill rises), crate timers, every panel and button, placement previews for Sorcerers and Crates, all effects, notifications, every tutorial step, the crate reveal through to Place, and hotkeys | 22 / 22 steps pass |
+| Economy pacing simulation (2-hour bot) | see *Pacing* |
+| Bake contract checks (6 farms x 10 slots x 4 pads, rings, locks, lane, Orb Box, Collect Pad, Sell Pad, crate displays, shop counters, spawn) | pass |
+| Map scale and composition | reviewed in aerial, plaza, gate, slot, pad, shop and Sell Stand previews with 5.2-stud avatar stand-ins |
 
-These checks caught and fixed real bugs before shipping, including a client crash (UI
-buttons stored functions as Instance fields), a forest travel point outside the combat zone,
-a spawn point rotated to face away from the tree, a mirrored `CFrame.lookAt` in the offline
-bake runtime (patched in the tooling so baked orientations match Roblox), a placement
-re-travel loop, and an overly long DataStore retry wait.
-
-**Please still do a manual pass in Studio.** See `docs/PLAYTEST_CHECKLIST.md`. Physics,
-rendering, input feel and performance on real devices can only be judged there.
+The offline engine can't simulate physics, rendering, real input or networking. **Please do
+a manual pass in Studio** with `docs/PLAYTEST_CHECKLIST.md`.
 
 ## Known limitations
 
-- **Not opened in Roblox Studio.** This environment has no Studio, so the game has not been run
-  in the real engine; see *Verification* for what was checked instead.
-- **No Toolbox, Blender or uploaded assets.** The Roblox domains were not reachable. Everything
-  is built from primitives (parts, wedges, ellipsoids, neon), with built-in particle textures and
-  sounds. There are no custom meshes, decals or images.
-- **Audio is minimal** for the same reason (see *Sound*).
-- **No custom character animations** (they require uploaded animation assets). Units bob
-  procedurally; players use their default Roblox animations.
-- Terrain is generated at server start unless you bake it in Studio.
+- **Not run in Roblox Studio** (no Studio connection here). See *Verification*.
+- **No Toolbox, Blender or uploaded assets.** Roblox's asset domains weren't reachable.
+  Everything is primitives (parts, wedges, ellipsoids, neon) with built-in particle textures
+  and sounds. There are no custom meshes, decals or images.
+- **Technique animations move the whole Sorcerer** (lunge, sweep, rise, recoil) plus effects.
+  Limb animation would need uploaded animation assets or rigged models.
+- **Audio is minimal** (see *Sound*).
+- Six farms per server. Set Max Players to 6.

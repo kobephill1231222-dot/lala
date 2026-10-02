@@ -27,13 +27,7 @@ export type Session = {
 	released: boolean,
 	saving: boolean,
 	isNew: boolean,
-	offlineGain: number,
-	offlineSeconds: number,
-	plot: number?,
-	cooldowns: { [string]: number },
-	spawnedOnce: boolean,
-	lastTravel: number,
-	lastCollectTouch: number,
+	offline: any?, -- Actions.claimOffline report for this join
 }
 
 local DataService = {}
@@ -60,7 +54,7 @@ local function createBackingStore(): (any, boolean)
 		end)
 		if not probeOk then
 			warn(
-				"[Cursebound] DataStore unavailable in Studio; using a temporary in-memory store (progress won't save)."
+				"[JJK Farm] DataStore unavailable in Studio; using a temporary in-memory store (progress won't save)."
 			)
 			return MockDataStore.new(), false
 		end
@@ -68,7 +62,7 @@ local function createBackingStore(): (any, boolean)
 		if RunService:IsStudio() then
 			return MockDataStore.new(), false
 		end
-		warn("[Cursebound] Could not open DataStore:", store)
+		warn("[JJK Farm] Could not open DataStore:", store)
 		-- A store whose every call fails: players get the safe "please rejoin" kick.
 		return {
 			UpdateAsync = function()
@@ -91,7 +85,7 @@ local function saveSession(session: Session, release: boolean)
 	end
 	session.saving = true
 	local t = now()
-	Actions.settleWell(session.profile, t)
+	Actions.settleBox(session.profile, t)
 	session.profile.lastSeen = t
 	local status, reason = profileStore:save(session.key, session.profile, release, GameConfig.SaveRetries)
 	session.saving = false
@@ -102,12 +96,12 @@ local function saveSession(session: Session, release: boolean)
 	elseif status == "lost" then
 		-- Another server owns this profile now; stop writing and disconnect the stale copy.
 		session.released = true
-		warn("[Cursebound] Lost session lock for", session.key, reason)
+		warn("[JJK Farm] Lost session lock for", session.key, reason)
 		if not session.left then
-			session.player:Kick("Your sanctuary was opened on another server. Please rejoin.")
+			session.player:Kick("Your farm was opened on another server. Please rejoin.")
 		end
 	else
-		warn("[Cursebound] Save failed for", session.key, reason)
+		warn("[JJK Farm] Save failed for", session.key, reason)
 	end
 end
 
@@ -121,13 +115,7 @@ local function onPlayerAdded(player: Player)
 		released = false,
 		saving = false,
 		isNew = false,
-		offlineGain = 0,
-		offlineSeconds = 0,
-		plot = nil,
-		cooldowns = {},
-		spawnedOnce = false,
-		lastTravel = 0,
-		lastCollectTouch = 0,
+		offline = nil,
 	}
 	sessions[player] = session
 
@@ -139,10 +127,10 @@ local function onPlayerAdded(player: Player)
 		return
 	end
 	if status ~= "ok" then
-		warn("[Cursebound] Load failed for", session.key, raw)
+		warn("[JJK Farm] Load failed for", session.key, raw)
 		sessions[player] = nil
 		player:Kick(
-			"We couldn't load your sanctuary right now. Your progress is safe - please rejoin in a moment."
+			"We couldn't load your farm right now. Your progress is safe - please rejoin in a moment."
 		)
 		return
 	end
@@ -156,14 +144,17 @@ local function onPlayerAdded(player: Player)
 		local issues
 		profile, issues = ProfileSchema.sanitize(raw, t)
 		if #issues > 0 then
-			warn("[Cursebound] Repaired profile", session.key, table.concat(issues, "; "))
+			warn("[JJK Farm] Repaired profile", session.key, table.concat(issues, "; "))
 		end
 	end
 
-	local before = profile.well.stored
-	Actions.settleWell(profile, t)
-	session.offlineGain = profile.well.stored - before
-	session.offlineSeconds = math.max(0, t - profile.lastSeen)
+	-- Offline progress is claimed exactly once per load: it moves the Orb Box timestamp to
+	-- now, and that timestamp is what gets saved. The session lock guarantees no other server
+	-- holds this profile at the same time, so the same absence can't be claimed twice.
+	if not session.isNew then
+		session.offline = Actions.claimOffline(profile, t)
+	end
+	profile.lastSeen = t
 	profile.stats.sessions += 1
 
 	session.profile = profile

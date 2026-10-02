@@ -1,9 +1,11 @@
 --!strict
--- Builds the original unit designs from primitives. Every model has an anchored, invisible
+-- Builds the original Sorcerer designs from primitives. Every model has an anchored, invisible
 -- "Root" at its feet (PrimaryPart); all visible parts are welded to it so clients can animate
 -- the whole figure by moving one part. Front of the model is -Z (the Root's LookVector).
+-- Some Sorcerers bring a small companion spirit, built into the same model.
+-- Root carries a "Cast" attachment: where the technique's Cursed Orb appears.
 
-local Characters = require(script.Parent.Parent.Config.Characters)
+local Sorcerers = require(script.Parent.Parent.Config.Sorcerers)
 local Rarities = require(script.Parent.Parent.Config.Rarities)
 local PartKit = require(script.Parent.PartKit)
 
@@ -12,7 +14,12 @@ local CharacterModels = {}
 export type Options = {
 	aura: boolean?, -- rarity particles
 	ghost: boolean?, -- translucent placement preview
+	scale: number?, -- 1 = 5.6 studs tall
+	companion: boolean?, -- default true
 }
+
+-- Sorcerers on a farm are drawn a bit larger than an avatar so they read from a distance.
+CharacterModels.FarmScale = 1.35
 
 local rad = math.rad
 local V3 = Vector3.new
@@ -35,6 +42,7 @@ type Ctx = {
 	root: BasePart,
 	base: CFrame,
 	ghost: boolean,
+	scale: number,
 }
 
 -- Adds a welded detail part. `shape` = "block" | "ball" | "ellipsoid" | "cyl" (along local Y) | "wedge"
@@ -47,6 +55,11 @@ local function add(
 	material: Enum.Material?,
 	extra: { [string]: any }?
 ): BasePart
+	local s = ctx.scale
+	if s ~= 1 then
+		cf = CFrame.new(cf.Position * s) * cf.Rotation
+		size = size * s
+	end
 	local world = ctx.base * cf
 	local props: { [string]: any } = {
 		Size = size,
@@ -260,10 +273,17 @@ ACCESSORIES.Orbs = function(ctx, look)
 			"ball",
 			V3(0.42, 0.42, 0.42),
 			L(math.cos(a) * 1.9, 3.4 + (i % 2) * 0.5, math.sin(a) * 1.4),
-			look.aura,
+			look.aura or look.trim,
 			NEON
 		)
 	end
+end
+
+ACCESSORIES.Hood = function(ctx, look)
+	-- A hoodie hood resting on the shoulders behind the head.
+	add(ctx, "ellipsoid", V3(2.5, 1.5, 1.4), L(0, HEAD_Y - 0.7, 0.75, -10, 0, 0), look.outfit, FABRIC)
+	add(ctx, "block", V3(0.12, 1.1, 0.12), L(-0.35, 2.95, -0.56), look.trim)
+	add(ctx, "block", V3(0.12, 1.0, 0.12), L(0.35, 3.0, -0.56), look.trim)
 end
 
 ACCESSORIES.Halo = function(ctx, look)
@@ -617,12 +637,68 @@ local HEIGHTS = {
 	Serpent = 7.2,
 }
 
-function CharacterModels.heightOf(id: string): number
-	local def = Characters.get(id)
-	return if def then HEIGHTS[def.look.template] or 5 else 5
+function CharacterModels.heightOf(id: string, scale: number?): number
+	local def = Sorcerers.get(id)
+	local h = if def then HEIGHTS[def.look.template] or 5 else 5
+	return h * (scale or 1)
 end
 
-local function addAura(ctx: Ctx, def: Characters.CharacterDef)
+-- Companion spirits: template look, size relative to the sorcerer, and where they sit
+-- (sorcerer-local, before scaling).
+local COMPANIONS: { [string]: { look: { [string]: any }, scale: number, offset: CFrame } } = {
+	Toad = {
+		look = {
+			body = Color3.fromRGB(92, 116, 70),
+			belly = Color3.fromRGB(196, 186, 140),
+			moss = Color3.fromRGB(70, 132, 64),
+			eye = Color3.fromRGB(250, 210, 90),
+			hat = Color3.fromRGB(186, 150, 92),
+		},
+		scale = 0.6,
+		offset = L(-2.4, 0, -0.4, 0, -15, 0),
+	},
+	Moth = {
+		look = {
+			body = Color3.fromRGB(70, 74, 104),
+			wing = Color3.fromRGB(170, 220, 255),
+			wingEdge = Color3.fromRGB(90, 130, 220),
+			eye = Color3.fromRGB(220, 250, 255),
+		},
+		scale = 0.42,
+		offset = L(-1.9, 3.2, 0.3, 0, -20, 0),
+	},
+	Mask = {
+		look = {
+			mask = Color3.fromRGB(238, 232, 222),
+			marking = Color3.fromRGB(196, 40, 60),
+			cloak = Color3.fromRGB(22, 18, 28),
+			eye = Color3.fromRGB(255, 80, 110),
+		},
+		scale = 0.45,
+		offset = L(2.2, 2.6, 0.8, 0, 20, 0),
+	},
+	Wolf = {
+		look = {
+			fur = Color3.fromRGB(236, 232, 214),
+			accent = Color3.fromRGB(255, 214, 60),
+			eye = Color3.fromRGB(120, 220, 255),
+		},
+		scale = 0.62,
+		offset = L(-2.6, 0, 0.2, 0, -10, 0),
+	},
+	Serpent = {
+		look = {
+			scale = Color3.fromRGB(48, 40, 62),
+			crack = Color3.fromRGB(186, 90, 255),
+			horn = Color3.fromRGB(220, 210, 230),
+			eye = Color3.fromRGB(255, 70, 120),
+		},
+		scale = 0.5,
+		offset = L(0, 0, 2.2, 0, 180, 0),
+	},
+}
+
+local function addAura(ctx: Ctx, def: Sorcerers.Sorcerer)
 	local rarity = Rarities.get(def.rarity)
 	if not rarity or rarity.auraRate <= 0 then
 		return
@@ -664,11 +740,12 @@ local function addAura(ctx: Ctx, def: Characters.CharacterDef)
 	end
 end
 
--- Builds the unit standing at `baseCFrame` (feet at its position, facing its LookVector).
+-- Builds the Sorcerer standing at `baseCFrame` (feet at its position, facing its LookVector).
 function CharacterModels.build(id: string, baseCFrame: CFrame, options: Options?): Model
 	local opts: Options = options or {}
-	local def = Characters.get(id)
-	assert(def, "unknown character " .. tostring(id))
+	local def = Sorcerers.get(id)
+	assert(def, "unknown sorcerer " .. tostring(id))
+	local scale = opts.scale or 1
 	local model = Instance.new("Model")
 	model.Name = def.id
 	local root = PartKit.part(model, {
@@ -683,7 +760,8 @@ function CharacterModels.build(id: string, baseCFrame: CFrame, options: Options?
 		CastShadow = false,
 	})
 	model.PrimaryPart = root
-	local ctx: Ctx = { model = model, root = root, base = baseCFrame, ghost = opts.ghost == true }
+	local ctx: Ctx =
+		{ model = model, root = root, base = baseCFrame, ghost = opts.ghost == true, scale = scale }
 	local template = def.look.template
 	if template == "Sorcerer" then
 		buildSorcerer(ctx, def.look)
@@ -692,9 +770,26 @@ function CharacterModels.build(id: string, baseCFrame: CFrame, options: Options?
 		assert(builder, "missing spirit template " .. tostring(template))
 		builder(ctx, def.look)
 	end
+	local companion = def.look.companion and COMPANIONS[def.look.companion]
+	if companion and opts.companion ~= false then
+		local offset = companion.offset
+		local sub: Ctx = {
+			model = model,
+			root = root,
+			base = baseCFrame * CFrame.new(offset.Position * scale) * offset.Rotation,
+			ghost = ctx.ghost,
+			scale = scale * companion.scale,
+		}
+		SPIRITS[def.look.companion](sub, companion.look)
+	end
 	if opts.aura and not ctx.ghost then
 		addAura(ctx, def)
 	end
+	local cast = Instance.new("Attachment")
+	cast.Name = "Cast"
+	cast.Position = Vector3.new(0, 2.6 * scale, -1.6 * scale)
+	cast.Parent = root
+	model:SetAttribute("Height", HEIGHTS.Sorcerer * scale)
 	return model
 end
 

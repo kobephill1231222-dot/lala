@@ -29,11 +29,9 @@ local function findOrCreate(parent: Instance, className: string, name: string): 
 	return inst
 end
 
-local function ensureLeaderstats(player: Player): (StringValue, StringValue)
+local function ensureLeaderstats(player: Player): StringValue
 	local stats = findOrCreate(player, "Folder", "leaderstats")
-	local energy = findOrCreate(stats, "StringValue", "Energy") :: StringValue
-	local rate = findOrCreate(stats, "StringValue", "Rate") :: StringValue
-	return energy, rate
+	return findOrCreate(stats, "StringValue", "Cash") :: StringValue
 end
 
 local function send(player: Player)
@@ -44,19 +42,16 @@ local function send(player: Player)
 	local profile = session.profile
 	local view = ProfileSchema.publicView(profile)
 	view.serverTime = workspace:GetServerTimeNow()
-	view.plot = session.plot
+	view.farm = services.FarmService.farmOf(player)
 	view.persistent = services.DataService.persistent
 	services.Remotes.State:FireClient(player, view)
 
-	local rate = Economy.totalRate(profile)
-	player:SetAttribute("Energy", profile.energy)
-	player:SetAttribute("Seals", profile.seals)
-	player:SetAttribute("Rate", rate)
-	local energyStat, rateStat = ensureLeaderstats(player)
-	energyStat.Value = Format.abbreviate(profile.energy)
-	rateStat.Value = Format.rate(rate)
+	local _, income = Economy.totals(profile)
+	player:SetAttribute("Cash", profile.cash)
+	player:SetAttribute("Income", income)
+	ensureLeaderstats(player).Value = Format.cash(profile.cash)
 
-	services.PlotService.updateWell(player)
+	services.FarmService.sync(player)
 end
 
 function StateService.markDirty(player: Player)

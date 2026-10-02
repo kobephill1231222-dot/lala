@@ -100,6 +100,7 @@ function EngineShim.install(game, options)
 		bindToClose = {},
 		invokeHandlers = {},
 		moveTargets = {},
+		players = {},
 		dataStore = options.dataStore,
 	}
 	EngineShim.state = state
@@ -139,10 +140,12 @@ function EngineShim.install(game, options)
 		end
 		return list
 	end)
-	roblox.implementMethod("Players", "GetPlayerFromCharacter", function(players, character)
-		for _, child in players:GetChildren() do
-			if child:IsA("Player") and child.Character == character then
-				return child
+	roblox.implementMethod("Players", "GetPlayerFromCharacter", function(_, character)
+		-- Return the same Player object the game was given (Lune creates a fresh userdata for
+		-- every GetChildren call, and game code keys tables by Player like Roblox allows).
+		for _, player in state.players do
+			if player.Parent and player.Character == character then
+				return player
 			end
 		end
 		return nil
@@ -244,6 +247,7 @@ function EngineShim.addPlayer(game, name, userId, position)
 	player.UserId = userId
 	player.DisplayName = name
 	player.Parent = players
+	EngineShim.state.players[userId] = player
 	players.PlayerAdded:Fire(player)
 	return player
 end

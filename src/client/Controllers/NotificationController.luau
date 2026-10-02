@@ -3,21 +3,20 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Format = require(ReplicatedStorage:WaitForChild("Shared").Util.Format)
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.Config.GameConfig)
+local Tutorial = require(Shared.Rules.Tutorial)
+local Format = require(Shared.Util.Format)
 
 local NotificationController = {}
 
 local registry: any
 
 local function rewardText(reward: any): string
-	local parts = {}
-	if reward and reward.energy then
-		table.insert(parts, "+" .. Format.abbreviate(reward.energy) .. " energy")
+	if reward and reward.cash then
+		return "+" .. Format.cash(reward.cash)
 	end
-	if reward and reward.seals then
-		table.insert(parts, "+" .. reward.seals .. " Curse Seals")
-	end
-	return table.concat(parts, "  ")
+	return ""
 end
 
 function NotificationController.init(reg: any)
@@ -33,17 +32,6 @@ function NotificationController.start()
 			if payload.tone == "bad" then
 				registry.SoundController.play("error")
 			end
-		elseif kind == "Kill" then
-			local text = string.format(
-				"%s defeated!  +%s energy",
-				payload.name or "Curse",
-				Format.abbreviate(payload.energy or 0)
-			)
-			if (payload.seals or 0) > 0 then
-				text ..= string.format("  +%d Seal%s", payload.seals, if payload.seals > 1 then "s" else "")
-			end
-			ui.toast(text, if (payload.seals or 0) > 0 then "rare" else "good", 2.6)
-			registry.SoundController.play("reward")
 		elseif kind == "TutorialStep" then
 			local reward = rewardText(payload.reward)
 			ui.toast(
@@ -52,13 +40,29 @@ function NotificationController.start()
 				3.5
 			)
 			registry.SoundController.play("upgrade")
-			if payload.nextStep and payload.nextStep > 5 then
+			if reward ~= "" then
+				ui.pulseCash()
+			end
+			if payload.nextStep and payload.nextStep >= Tutorial.Done then
 				task.delay(1.2, function()
-					ui.toast("Tutorial complete! Keep collecting, summoning and upgrading.", "reward", 5)
+					ui.toast(
+						"Tutorial complete! Keep opening Crates, placing Sorcerers and upgrading Your Farm.",
+						"reward",
+						5
+					)
 				end)
 			end
 		elseif kind == "Offline" then
-			ui.toast(payload.text or "Welcome back!", "reward", 6)
+			local text = payload.text or "Welcome back!"
+			if payload.capped then
+				text ..= string.format(
+					" (Offline progress counts up to %d hours.)",
+					GameConfig.MaxOfflineSeconds // 3600
+				)
+			elseif payload.boxFull then
+				text ..= " Your Orb Box is full - Collect it!"
+			end
+			ui.toast(text, "reward", 8)
 		elseif kind == "StudioMode" then
 			ui.toast(
 				"Studio test session: DataStores are unavailable, so progress won't be saved.",

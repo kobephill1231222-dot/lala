@@ -41,6 +41,14 @@ function Format.commas(value: number): string
 	return if value < 0 then "-" .. formatted else formatted
 end
 
+-- "$1.23K"
+function Format.cash(value: number): string
+	if math.abs(value) < 1000 then
+		return "$" .. Format.commas(value)
+	end
+	return "$" .. Format.abbreviate(value)
+end
+
 function Format.rate(perSecond: number): string
 	return Format.abbreviate(perSecond) .. "/s"
 end
@@ -53,6 +61,15 @@ function Format.duration(seconds: number): string
 		return string.format("%dm %02ds", seconds // 60, seconds % 60)
 	end
 	return string.format("%dh %02dm", seconds // 3600, (seconds % 3600) // 60)
+end
+
+-- Countdown clock: "0:42", "4:05", "1:02:09".
+function Format.clock(seconds: number): string
+	seconds = math.max(0, math.ceil(seconds))
+	if seconds >= 3600 then
+		return string.format("%d:%02d:%02d", seconds // 3600, (seconds % 3600) // 60, seconds % 60)
+	end
+	return string.format("%d:%02d", seconds // 60, seconds % 60)
 end
 
 function Format.percent(fraction: number): string

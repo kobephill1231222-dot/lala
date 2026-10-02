@@ -1,125 +1,103 @@
 --!strict
--- Pure economy formulas shared by server (authoritative) and client (display only).
--- Nothing in here mutates state or touches Roblox services.
+-- Pure economy formulas shared by the server (authoritative) and the client (display only).
 
 local Config = script.Parent.Parent.Config
-local Abilities = require(Config.Abilities)
-local Banners = require(Config.Banners)
-local Characters = require(Config.Characters)
-local Enemies = require(Config.Enemies)
+local Crates = require(Config.Crates)
 local GameConfig = require(Config.GameConfig)
 local Rarities = require(Config.Rarities)
+local Sorcerers = require(Config.Sorcerers)
 local Upgrades = require(Config.Upgrades)
 
-export type Unit = { id: string, level: number, t: number? }
+export type Unit = { id: string, level: number }
 
 local Economy = {}
 
-local function upgradeLevel(profile: any, id: string): number
+function Economy.upgradeLevel(profile: any, id: string): number
 	local upgrades = profile and profile.upgrades
 	return if upgrades and type(upgrades[id]) == "number" then upgrades[id] else 0
 end
-Economy.upgradeLevel = upgradeLevel
 
 function Economy.maxLevel(unit: Unit): number
-	local def = Characters.get(unit.id)
+	local def = Sorcerers.get(unit.id)
 	local rarity = def and Rarities.get(def.rarity)
 	return if rarity then rarity.maxLevel else 1
 end
 
-function Economy.levelMultiplier(level: number): number
-	return 1 + GameConfig.RatePerLevel * (level - 1)
-end
-
-function Economy.productionMultiplier(profile: any): number
-	return 1 + GameConfig.ProductionPerUpgrade * upgradeLevel(profile, "production")
-end
-
--- Energy per second of a single unit before sanctuary-wide multipliers.
-function Economy.unitBaseRate(unit: Unit): number
-	local def = Characters.get(unit.id)
+-- Orb Value of one sorcerer (Cash per Cursed Orb), including the farm's Orb Value upgrade.
+function Economy.orbValue(unit: Unit, profile: any): number
+	local def = Sorcerers.get(unit.id)
 	if not def then
 		return 0
 	end
-	return def.rate * Economy.levelMultiplier(unit.level)
+	local levelMult = 1 + GameConfig.OrbValuePerLevel * (unit.level - 1)
+	local farmMult = 1 + GameConfig.OrbValuePerUpgrade * Economy.upgradeLevel(profile, "orbValue")
+	return def.orbValue * levelMult * farmMult
 end
 
-function Economy.unitRate(unit: Unit, profile: any): number
-	return Economy.unitBaseRate(unit) * Economy.productionMultiplier(profile)
+function Economy.ops(unit: Unit): number
+	local def = Sorcerers.get(unit.id)
+	return if def then def.ops else 0
 end
 
-function Economy.unitPower(unit: Unit): number
-	local def = Characters.get(unit.id)
-	if not def then
-		return 0
-	end
-	return math.floor(def.power * (1 + GameConfig.PowerPerLevel * (unit.level - 1)) + 0.5)
+function Economy.income(unit: Unit, profile: any): number
+	return Economy.ops(unit) * Economy.orbValue(unit, profile)
 end
 
--- Iterates placed, valid units: callback(spotIndex, uid, unit)
 function Economy.forEachPlaced(profile: any, callback: (number, string, Unit) -> ())
-	for spotKey, uid in profile.spots do
+	for slotKey, uid in profile.slots do
 		local unit = profile.units[uid]
-		local spot = tonumber(spotKey)
-		if unit and spot and Characters.get(unit.id) then
-			callback(spot, uid, unit)
+		local slot = tonumber(slotKey)
+		if unit and slot and Sorcerers.get(unit.id) then
+			callback(slot, uid, unit)
 		end
 	end
 end
 
-function Economy.totalRate(profile: any): number
-	local total = 0
+-- Orbs per Second and Cash per second of the whole farm.
+function Economy.totals(profile: any): (number, number)
+	local ops, cash = 0, 0
 	Economy.forEachPlaced(profile, function(_, _, unit)
-		total += Economy.unitBaseRate(unit)
+		ops += Economy.ops(unit)
+		cash += Economy.income(unit, profile)
 	end)
-	return total * Economy.productionMultiplier(profile)
+	return ops, cash
 end
 
-function Economy.teamPower(profile: any): number
-	local total = 0
-	Economy.forEachPlaced(profile, function(_, _, unit)
-		total += Economy.unitPower(unit)
-	end)
-	return total
+function Economy.boxCapacity(profile: any): number
+	return math.floor(
+		GameConfig.BoxBaseCapacity * GameConfig.BoxGrowthPerLevel ^ Economy.upgradeLevel(profile, "boxSize")
+	)
 end
 
-function Economy.wellCapacitySeconds(profile: any): number
-	return GameConfig.WellBaseSeconds + GameConfig.WellSecondsPerLevel * upgradeLevel(profile, "capacity")
-end
-
-function Economy.wellCapacity(profile: any, rate: number?): number
-	local r = rate or Economy.totalRate(profile)
-	return math.max(GameConfig.WellMinCapacity, math.floor(r * Economy.wellCapacitySeconds(profile)))
-end
-
--- Stored energy at time `now` without mutating the profile (used by UI extrapolation too).
-function Economy.wellStoredAt(profile: any, now: number): number
-	local well = profile.well
-	local rate = Economy.totalRate(profile)
-	local cap = Economy.wellCapacity(profile, rate)
-	if well.stored >= cap then
-		return well.stored
+-- Orb Box contents at time `now` (does not modify the profile).
+function Economy.boxAt(profile: any, now: number): (number, number)
+	local box = profile.box
+	local cap = Economy.boxCapacity(profile)
+	local ops, cash = Economy.totals(profile)
+	if ops <= 0 or box.orbs >= cap then
+		return box.orbs, box.value
 	end
-	local dt = math.clamp(now - well.t, 0, GameConfig.MaxOfflineSeconds)
-	return math.min(cap, well.stored + rate * dt)
+	local dt = math.clamp(now - box.t, 0, GameConfig.MaxOfflineSeconds)
+	local added = math.min(cap - box.orbs, ops * dt)
+	return box.orbs + added, box.value + added * (cash / ops)
 end
 
-function Economy.trainCost(unit: Unit): number?
-	local def = Characters.get(unit.id)
+function Economy.unitUpgradeCost(unit: Unit): number?
+	local def = Sorcerers.get(unit.id)
 	local rarity = def and Rarities.get(def.rarity)
 	if not rarity or unit.level >= rarity.maxLevel then
 		return nil
 	end
-	return math.floor(rarity.trainBase * rarity.trainGrowth ^ (unit.level - 1))
+	return math.floor(rarity.upgradeBase * rarity.upgradeGrowth ^ (unit.level - 1))
 end
 
-function Economy.releaseValue(unit: Unit): number
-	local def = Characters.get(unit.id)
+function Economy.sellValue(unit: Unit): number
+	local def = Sorcerers.get(unit.id)
 	local rarity = def and Rarities.get(def.rarity)
 	if not rarity then
 		return 0
 	end
-	return math.floor(rarity.releaseValue * (1 + 0.5 * (unit.level - 1)))
+	return math.floor(rarity.sellValue * (1 + 0.5 * (unit.level - 1)))
 end
 
 function Economy.upgradeCost(id: string, level: number): number?
@@ -127,53 +105,50 @@ function Economy.upgradeCost(id: string, level: number): number?
 	if not def or level >= def.maxLevel then
 		return nil
 	end
+	if def.costs then
+		return def.costs[level + 1]
+	end
 	return math.floor(def.baseCost * def.growth ^ level)
 end
 
-function Economy.spotUnlockCost(spot: number): number?
-	return GameConfig.SpotUnlockCosts[spot]
+function Economy.unlockedSlots(profile: any): number
+	return GameConfig.StartingSlots + Economy.upgradeLevel(profile, "slots")
 end
 
-function Economy.damageMultiplier(profile: any): number
-	local mastery = 1 + GameConfig.CombatPerUpgrade * upgradeLevel(profile, "combat")
-	local team = 1 + Economy.teamPower(profile) / GameConfig.TeamPowerDivisor
-	return mastery * team
+function Economy.unlockedPads(profile: any): number
+	return GameConfig.StartingPads + Economy.upgradeLevel(profile, "pads")
 end
 
-function Economy.abilityDamage(profile: any, abilityId: string): number
-	local ability = Abilities.ById[abilityId]
-	if not ability then
+function Economy.walkSpeed(profile: any): number
+	return GameConfig.BaseWalkSpeed
+		+ GameConfig.WalkSpeedPerLevel * Economy.upgradeLevel(profile, "walkSpeed")
+end
+
+-- Opening Time of a crate tier after the Opening Speed upgrade.
+function Economy.openingTime(crateId: string, profile: any): number
+	local def = Crates.get(crateId)
+	if not def then
 		return 0
 	end
-	return math.floor(Abilities.BaseDamage * ability.damageScale * Economy.damageMultiplier(profile) + 0.5)
+	local speed = math.min(0.6, GameConfig.OpenSpeedPerLevel * Economy.upgradeLevel(profile, "openSpeed"))
+	return math.max(3, math.floor(def.openingTime * (1 - speed) + 0.5))
 end
 
-function Economy.combatReward(enemyId: string, profile: any): number
-	local enemy = Enemies.ById[enemyId]
-	if not enemy then
-		return 0
-	end
-	return math.floor(enemy.rewardEnergy + Economy.totalRate(profile) * enemy.rewardIncomeSeconds)
-end
-
--- Rarity weights for a banner after Ritual Fortune is applied.
-function Economy.rarityWeights(bannerId: string, luckLevel: number): { [string]: number }
-	local banner = Banners.get(bannerId)
+function Economy.crateWeights(crateId: string, luckLevel: number): { [string]: number }
+	local def = Crates.get(crateId)
 	local weights = {}
-	if not banner then
+	if not def then
 		return weights
 	end
 	for _, rarity in Rarities.Order do
-		local base = banner.weights[rarity] or 0
-		local bonus = Banners.LuckPerLevel[rarity] or 0
-		weights[rarity] = base * (1 + bonus * luckLevel)
+		local base = def.odds[rarity] or 0
+		weights[rarity] = base * (1 + (Crates.LuckPerLevel[rarity] or 0) * luckLevel)
 	end
 	return weights
 end
 
--- Normalised probabilities (0..1) for display.
-function Economy.rarityChances(bannerId: string, luckLevel: number): { [string]: number }
-	local weights = Economy.rarityWeights(bannerId, luckLevel)
+function Economy.crateChances(crateId: string, luckLevel: number): { [string]: number }
+	local weights = Economy.crateWeights(crateId, luckLevel)
 	local total = 0
 	for _, w in weights do
 		total += w

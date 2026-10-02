@@ -1,0 +1,5 @@
+[
+  {"name": "20_sorcerers_front", "pos": [38, 10, 34], "look": [38, 4, -7], "fov": 62, "focus": [38, 4, 0], "fog": 0.0},
+  {"name": "21_sorcerers_close", "pos": [10, 6.5, 16], "look": [16, 4.5, -2], "fov": 55, "focus": [14, 4, 0], "fog": 0.0},
+  {"name": "23_crates", "pos": [18, 8, 62], "look": [18, 2.5, 44], "fov": 55, "focus": [18, 2, 44], "fog": 0.0}
+]

@@ -1,5 +1,6 @@
 --!nocheck
--- Economy pacing simulation: a greedy bot plays the real rules for N minutes.
+-- Economy pacing simulation: a greedy bot plays the real rules for N minutes, including
+-- the walk to the Sell Stand. Prints milestones and income over time.
 -- Usage: lune run tools/lune/simulate.luau build/game.rbxl [minutes]
 local process = require("@lune/process")
 local Sandbox = require("./lib/Sandbox")
@@ -12,249 +13,226 @@ end
 local Economy, Actions, Schema, Tutorial =
 	req("Rules/Economy"), req("Rules/Actions"), req("Rules/ProfileSchema"), req("Rules/Tutorial")
 local Prng, Format = req("Util/Prng"), req("Util/Format")
-local Characters, Banners, GameConfig, Enemies =
-	req("Config/Characters"), req("Config/Banners"), req("Config/GameConfig"), req("Config/Enemies")
+local Crates, Sorcerers, Rarities, GameConfig, Upgrades =
+	req("Config/Crates"),
+	req("Config/Sorcerers"),
+	req("Config/Rarities"),
+	req("Config/GameConfig"),
+	req("Config/Upgrades")
 
 local minutes = tonumber(process.args[2]) or 120
+local SELL_TRIP = 22 -- seconds from Orb Box to Sell Stand and back
 local rng = Prng.new(7)
 local p = Schema.new(0)
 local t = 0
 local milestones = {}
+
 local function mark(name)
-	if not milestones[name] then
-		milestones[name] = t
+	local key = name:match("^first %a+") or name
+	if not milestones[key] then
+		milestones[key] = t
+		local _, cash = Economy.totals(p)
 		print(
 			string.format(
-				"[%s] %s  (rate %s, energy %s)",
+				"[%s] %s  (income %s/s, cash %s)",
 				Format.duration(t),
 				name,
-				Format.rate(Economy.totalRate(p)),
-				Format.abbreviate(p.energy)
+				Format.abbreviate(cash),
+				Format.cash(p.cash)
 			)
 		)
 	end
 end
 
-local function expectedBaseRate(bannerId)
-	local chances = Economy.rarityChances(bannerId, p.upgrades.luck)
+local function event(name)
+	Tutorial.advance(p, name)
+end
+
+-- Expected Cash/s of one level-1 sorcerer from a crate tier.
+local function expectedIncome(tier)
 	local e = 0
-	for rarity, c in chances do
-		local pool = Characters.ByRarity[rarity]
+	for rarity, c in Economy.crateChances(tier, Economy.upgradeLevel(p, "luck")) do
+		local pool = Sorcerers.ByRarity[rarity] or {}
 		local avg = 0
 		for _, d in pool do
-			avg += d.rate
+			avg += d.ops * d.orbValue
 		end
-		e += c * avg / #pool
+		if #pool > 0 then
+			e += c * avg / #pool
+		end
 	end
 	return e
 end
 
-local function placedList()
+local function rankedUnits()
 	local list = {}
-	Economy.forEachPlaced(p, function(spot, uid, unit)
-		table.insert(list, { spot = spot, uid = uid, rate = Economy.unitBaseRate(unit) })
-	end)
+	for uid, unit in p.units do
+		table.insert(list, { uid = uid, income = Economy.income(unit, p) })
+	end
 	table.sort(list, function(a, b)
-		return a.rate < b.rate
+		return a.income > b.income
 	end)
 	return list
 end
 
-local function freeSpot()
-	for s = 1, p.unlockedSpots do
-		if not p.spots[tostring(s)] then
-			return s
+local function arrangeSlots()
+	local list = rankedUnits()
+	local slots = Economy.unlockedSlots(p)
+	for i = 1, slots do
+		local best = list[i]
+		if best and p.slots[tostring(i)] ~= best.uid then
+			if Actions.placeSorcerer(p, best.uid, i, t) then
+				event("placeSorcerer")
+			end
 		end
+	end
+	-- Sell surplus that will never be placed again (keeps the inventory small).
+	for i = slots + 6, #list do
+		Actions.sellSorcerer(p, list[i].uid, t)
 	end
 end
 
-local function autoPlace()
-	-- Fill empty spots / replace weaker units with the best unplaced units.
-	local changed = true
-	while changed do
-		changed = false
-		local best, bestRate = nil, -1
-		for uid, unit in p.units do
-			if not Actions.spotOf(p, uid) then
-				local r = Economy.unitBaseRate(unit)
-				if r > bestRate then
-					best, bestRate = uid, r
+local function handleCrates()
+	for pad = 1, Economy.unlockedPads(p) do
+		local cid, crate = Actions.crateOnPad(p, pad)
+		if crate and t >= crate.readyAt then
+			local ok, res = Actions.openCrate(p, pad, rng, t)
+			if ok then
+				event("openCrate")
+				local def = Sorcerers.get(res.id)
+				if res.rarity ~= "Common" then
+					mark(
+						"first " .. res.rarity .. " (" .. def.name .. ", " .. Crates.get(res.tier).name .. ")"
+					)
+				end
+			end
+			cid = nil
+		end
+		if not cid then
+			for id, c in p.crates do
+				if not c.pad then
+					if Actions.placeCrate(p, id, pad, t) then
+						event("placeCrate")
+					end
+					break
 				end
 			end
 		end
-		if not best then
-			return
-		end
-		local s = freeSpot()
-		if s then
-			Actions.place(p, best, s, t)
-			changed = true
-			if Tutorial.advance(p, "place") then
-				mark("tutorial: placed")
-			end
-		else
-			local placed = placedList()
-			if placed[1] and placed[1].rate < bestRate then
-				Actions.unplace(p, placed[1].spot, t)
-				Actions.place(p, best, placed[1].spot, t)
-				changed = true
-			end
-		end
 	end
 end
 
-local function releaseJunk()
-	-- Keep roster small: release unplaced units worse than the weakest placed one.
-	local placed = placedList()
-	local floor = placed[1] and placed[1].rate or 0
-	for uid, unit in p.units do
-		if
-			not Actions.spotOf(p, uid)
-			and Economy.unitBaseRate(unit) <= floor
-			and Actions.countUnits(p) > 12
-		then
-			Actions.release(p, uid, t)
+local function shop()
+	local _, income = Economy.totals(p)
+	-- Crates: best tier whose price is under ~3 minutes of income (or the first Basic).
+	local waiting = 0
+	for _, c in p.crates do
+		if not c.pad then
+			waiting += 1
 		end
 	end
-end
-
-local function options()
-	local opts = {}
-	local mult = Economy.productionMultiplier(p)
-	local placed = placedList()
-	local worst = (freeSpot() and 0) or (placed[1] and placed[1].rate) or 0
-	for _, b in Banners.List do
-		if b.currency == "energy" then
-			local gain = math.max(0, expectedBaseRate(b.id) - worst) * mult
-			if Actions.countUnits(p) < GameConfig.InventoryLimit then
-				table.insert(opts, { kind = "summon", id = b.id, cost = b.cost, gain = gain })
-			end
-		end
-	end
-	local c = Economy.spotUnlockCost(p.unlockedSpots + 1)
-	if c then
-		table.insert(opts, { kind = "unlock", cost = c, gain = expectedBaseRate("lantern") * mult * 0.9 })
-	end
-	for _, entry in placed do
-		local unit = p.units[entry.uid]
-		local tc = Economy.trainCost(unit)
-		if tc then
-			local def = Characters.get(unit.id)
-			table.insert(opts, {
-				kind = "train",
-				uid = entry.uid,
-				cost = tc,
-				gain = def.rate * GameConfig.RatePerLevel * mult,
-			})
-		end
-	end
-	local pc = Economy.upgradeCost("production", p.upgrades.production)
-	if pc then
-		local base = 0
-		for _, e in placed do
-			base += e.rate
-		end
-		table.insert(opts, { kind = "production", cost = pc, gain = base * GameConfig.ProductionPerUpgrade })
-	end
-	return opts
-end
-
-local nextCollect = 0
-local nextFight = 300
-local totalCombat = 0
-while t < minutes * 60 do
-	-- The well is visited about every 45s (players roam), or immediately during the tutorial.
-	if t >= nextCollect then
-		local ok = Actions.collect(p, t)
-		if ok then
-			mark("first collect")
-			Tutorial.advance(p, "collect")
-		end
-		nextCollect = t + (p.tutorial <= 2 and 1 or 45)
-	end
-	-- Tutorial-shaped opening.
-	if p.tutorial == 2 and p.energy >= 50 then
-		local ok = Actions.summon(p, "lantern", 1, rng, t)
-		if ok then
-			Tutorial.advance(p, "summon")
-			mark("first summon")
-		end
-	end
-	autoPlace()
-	if p.tutorial == 4 and p.energy >= Economy.upgradeCost("production", 0) then
-		Actions.buyUpgrade(p, "production", t)
-		Tutorial.advance(p, "upgrade")
-		mark("first upgrade (tutorial)")
-	end
-	if p.tutorial >= 5 then
-		-- Greedy spending on the best value-per-cost option; wait if it isn't affordable yet.
-		for _ = 1, 20 do
-			local best, bestScore = nil, -1
-			for _, o in options() do
-				local score = o.gain / o.cost
-				if score > bestScore then
-					best, bestScore = o, score
+	if waiting < Economy.unlockedPads(p) then
+		for i = #Crates.List, 1, -1 do
+			local def = Crates.List[i]
+			if def.price > 0 and p.cash >= def.price and (def.price <= income * 180 or def.id == "basic") then
+				if Actions.buyCrate(p, def.id) then
+					event("buyCrate")
 				end
-			end
-			if not best or best.cost > p.energy then
 				break
 			end
-			if best.kind == "summon" then
-				local ok, res = Actions.summon(p, best.id, 1, rng, t)
-				if ok then
-					for _, u in res.units do
-						mark("first " .. u.rarity)
-					end
-				end
-			elseif best.kind == "unlock" then
-				local ok, res = Actions.unlockSpot(p, t)
-				if ok then
-					mark("spot " .. res.spot)
-				end
-			elseif best.kind == "train" then
-				Actions.train(p, best.uid, t)
-			elseif best.kind == "production" then
-				Actions.buyUpgrade(p, "production", t)
-			end
-			autoPlace()
-			releaseJunk()
 		end
 	end
-	-- Every 5 minutes the bot spends a minute in the forest: ~8 Gloomlings + 2 Wailers.
-	if t >= nextFight then
-		local reward = 8 * Economy.combatReward("gloomling", p) + 2 * Economy.combatReward("wailer", p)
-		local seals =
-			math.floor(8 * Enemies.ById.gloomling.sealChance + 2 * Enemies.ById.wailer.sealChance + 0.5)
-		Actions.grantReward(p, reward, seals)
-		totalCombat += reward
-		if Tutorial.advance(p, "kill") then
-			mark("tutorial complete")
+	-- Farm upgrades: buy the cheapest one that is useful right now.
+	local placedCount = 0
+	for _ in p.slots do
+		placedCount += 1
+	end
+	local candidates = {}
+	local function consider(id, useful)
+		local cost = Economy.upgradeCost(id, Economy.upgradeLevel(p, id))
+		if cost and useful then
+			table.insert(candidates, { id = id, cost = cost })
 		end
-		if p.seals >= 12 then
-			local ok, res = Actions.summon(p, "sealed", 1, rng, t)
-			if ok then
-				for _, u in res.units do
-					mark("first " .. u.rarity)
-				end
+	end
+	consider("orbValue", true)
+	consider("slots", placedCount >= Economy.unlockedSlots(p) and #rankedUnits() > placedCount)
+	consider("boxSize", Economy.boxCapacity(p) < (Economy.totals(p)) * 90)
+	consider("pads", true)
+	consider("openSpeed", true)
+	consider("luck", milestones["first Rare"] ~= nil)
+	consider("walkSpeed", false)
+	table.sort(candidates, function(a, b)
+		return a.cost < b.cost
+	end)
+	local best = candidates[1]
+	if best and p.cash >= best.cost then
+		if Actions.buyUpgrade(p, best.id, t) then
+			event("upgrade")
+			if best.id == "slots" then
+				mark(string.format("%d slots", Economy.unlockedSlots(p)))
 			end
 		end
-		nextFight = t + 300
-		t += 60
 	end
-	t += 1
-	if t % 600 == 0 then
-		print(
-			string.format(
-				"  t=%s rate=%s energy=%s spots=%d units=%d prod=%d seals=%d combatTotal=%s",
-				Format.duration(t),
-				Format.rate(Economy.totalRate(p)),
-				Format.abbreviate(p.energy),
-				p.unlockedSpots,
-				Actions.countUnits(p),
-				p.upgrades.production,
-				p.seals,
-				Format.abbreviate(totalCombat)
-			)
-		)
+	-- Sorcerer upgrades when cheap relative to income.
+	for _, entry in rankedUnits() do
+		local unit = p.units[entry.uid]
+		local cost = Economy.unitUpgradeCost(unit)
+		if cost and Actions.slotOf(p, entry.uid) and cost <= income * 30 and p.cash >= cost then
+			Actions.upgradeSorcerer(p, entry.uid, t)
+		end
 	end
 end
+
+local nextReport = 5 * 60
+local lastTrip = 0
+while t < minutes * 60 do
+	handleCrates()
+	arrangeSlots()
+	-- Sell trip when the box is half full or a minute has passed.
+	local orbs = Economy.boxAt(p, t)
+	if orbs >= Economy.boxCapacity(p) * 0.5 or (orbs >= 1 and t - lastTrip >= 60) then
+		if Actions.collect(p, t) then
+			event("collect")
+			t += SELL_TRIP
+			if Actions.sell(p) then
+				event("sell")
+			end
+			lastTrip = t
+		end
+	end
+	shop()
+	if p.tutorial == Tutorial.Done then
+		mark("tutorial done")
+	end
+	if t >= nextReport then
+		local ops, cash = Economy.totals(p)
+		local units = 0
+		for _ in p.units do
+			units += 1
+		end
+		print(
+			string.format(
+				"  %3d min: %s orbs/s, %s/s, %d sorcerers, slots %d, pads %d, Orb Value lv %d, box %d",
+				t // 60,
+				Format.abbreviate(ops),
+				Format.cash(cash),
+				units,
+				Economy.unlockedSlots(p),
+				Economy.unlockedPads(p),
+				p.upgrades.orbValue,
+				Economy.boxCapacity(p)
+			)
+		)
+		nextReport += 5 * 60
+	end
+	t += 1
+end
+print(
+	"stats",
+	p.stats.cratesBought,
+	"crates bought,",
+	p.stats.cratesOpened,
+	"opened,",
+	p.stats.orbsSold,
+	"orbs sold"
+)
+local _ = Rarities, GameConfig, Upgrades

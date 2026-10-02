@@ -31,21 +31,22 @@ SoundConfig.Effects = {
 	open = { builtin = BUILTIN.whoosh, volume = 0.18, speed = 2.2 },
 	close = { builtin = BUILTIN.whoosh, volume = 0.14, speed = 2.6 },
 	error = { builtin = BUILTIN.tick, volume = 0.5, speed = 0.55 },
+	orb = { builtin = BUILTIN.tick, volume = 0.12, speed = 2.6, variance = 0.25 },
+	technique = { builtin = BUILTIN.whoosh, volume = 0.12, speed = 2.0, variance = 0.2 },
 	collect = { builtin = BUILTIN.splash, volume = 0.38, speed = 1.7, variance = 0.08 },
+	sell = { builtin = BUILTIN.boom, volume = 0.22, speed = 2.4 },
 	coin = { builtin = BUILTIN.tick, volume = 0.35, speed = 2.1, variance = 0.15 },
-	summonCharge = { builtin = BUILTIN.whoosh, volume = 0.35, speed = 0.55 },
+	buy = { builtin = BUILTIN.thud, volume = 0.45, speed = 1.3 },
+	cratePlace = { builtin = BUILTIN.thud, volume = 0.55, speed = 0.9 },
+	crateReady = { builtin = BUILTIN.tick, volume = 0.4, speed = 1.6 },
+	crateShake = { builtin = BUILTIN.thud, volume = 0.35, speed = 1.6, variance = 0.15 },
 	reveal = { builtin = BUILTIN.boom, volume = 0.3, speed = 1.4 },
 	revealRare = { builtin = BUILTIN.boom, volume = 0.4, speed = 1.1 },
 	revealLegendary = { builtin = BUILTIN.boom, volume = 0.55, speed = 0.75 },
 	place = { builtin = BUILTIN.rise, volume = 0.5, speed = 1.2 },
+	pickUp = { builtin = BUILTIN.hop, volume = 0.4, speed = 1.3 },
 	unlock = { builtin = BUILTIN.boom, volume = 0.3, speed = 1.8 },
 	upgrade = { builtin = BUILTIN.rise, volume = 0.5, speed = 1.5 },
-	strike = { builtin = BUILTIN.whoosh, volume = 0.35, speed = 2.4, variance = 0.15 },
-	lance = { builtin = BUILTIN.whoosh, volume = 0.45, speed = 1.6 },
-	burst = { builtin = BUILTIN.boom, volume = 0.35, speed = 1.6 },
-	hit = { builtin = BUILTIN.thud, volume = 0.5, speed = 1.5, variance = 0.15 },
-	curseDeath = { builtin = BUILTIN.boom, volume = 0.35, speed = 2.2 },
-	curseStrike = { builtin = BUILTIN.thud, volume = 0.6, speed = 0.7 },
 	reward = { builtin = BUILTIN.tick, volume = 0.45, speed = 1.8 },
 	travel = { builtin = BUILTIN.whoosh, volume = 0.3, speed = 1.2 },
 } :: { [string]: SoundDef }
@@ -53,11 +54,8 @@ SoundConfig.Effects = {
 -- Looping beds attached to the map's AmbientEmitters (by AmbientKind attribute).
 -- Leave `id` empty to keep them silent.
 SoundConfig.Ambient = {
-	Water = { id = "", volume = 0.35, rolloff = 70 },
-	Forest = { id = "", volume = 0.45, rolloff = 120 },
-	Shrine = { id = "", volume = 0.3, rolloff = 110 },
-	Courtyard = { id = "", volume = 0.25, rolloff = 70 },
-	Village = { id = "", volume = 0.25, rolloff = 90 },
+	Plaza = { id = "", volume = 0.25, rolloff = 90 },
+	Farm = { id = "", volume = 0.25, rolloff = 70 },
 }
 
 -- Background music (looped, non-positional). Empty = no music.

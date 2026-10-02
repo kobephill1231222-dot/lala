@@ -1,14 +1,17 @@
 --!strict
--- Handles every client request. Each handler validates its payload, applies the pure rule in
--- Shared/Rules/Actions, then triggers replication, world updates, tutorial progress and effects.
+-- Handles every client request. Each handler validates its payload and the player's
+-- position, applies the pure rule in Shared/Rules/Actions, then triggers replication,
+-- farm updates, tutorial progress and effects. Cash only ever changes here, on the server.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Banners = require(Shared.Config.Banners)
-local Layout = require(Shared.Config.MapLayout)
+local Crates = require(Shared.Config.Crates)
+local GameConfig = require(Shared.Config.GameConfig)
+local Layout = require(Shared.Config.FarmLayout)
 local Rarities = require(Shared.Config.Rarities)
+local Sorcerers = require(Shared.Config.Sorcerers)
 local Upgrades = require(Shared.Config.Upgrades)
 local Actions = require(Shared.Rules.Actions)
 local Tutorial = require(Shared.Rules.Tutorial)
@@ -21,11 +24,8 @@ type Result = { ok: boolean, message: string?, data: any? }
 
 local services: any
 local requestLimiter = RateLimiter.new(8, 16)
-local summonLimiter = RateLimiter.new(1.2, 3)
+local touchLimiter = RateLimiter.new(1, 2)
 local rng = Random.new()
-
--- Anywhere inside your own sanctuary counts (the well also collects on touch).
-local COLLECT_RANGE = 45
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -39,6 +39,15 @@ local function rootOf(player: Player): BasePart?
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	return if root and root:IsA("BasePart") then root else nil
+end
+
+local function distanceTo(player: Player, position: Vector3): number
+	local root = rootOf(player)
+	if not root then
+		return math.huge
+	end
+	local delta = root.Position - position
+	return Vector3.new(delta.X, 0, delta.Z).Magnitude
 end
 
 local function notify(player: Player, kind: string, payload: any)
@@ -63,15 +72,15 @@ end
 GameService.tutorialEvent = tutorialEvent
 
 local function changed(player: Player, render: boolean?)
-	services.StateService.markDirty(player)
 	if render then
-		services.PlotService.render(player)
+		services.FarmService.render(player)
 	end
+	services.StateService.markDirty(player)
 end
 
 -- Validators -----------------------------------------------------------------------------
 
-local function isUid(v: any): boolean
+local function isId(v: any): boolean
 	return type(v) == "string" and #v > 0 and #v <= 12 and string.match(v, "^%d+$") ~= nil
 end
 
@@ -79,25 +88,56 @@ local function isInteger(v: any, lo: number, hi: number): boolean
 	return type(v) == "number" and v == v and v == math.floor(v) and v >= lo and v <= hi
 end
 
--- Collection is shared by the well's touch sensor and the client prompt.
+local function requireFarm(player: Player, session: any): (number?, string?)
+	local farm = services.FarmService.farmOf(player)
+	if not farm then
+		return nil, "You don't have a farm on this server."
+	end
+	local root = rootOf(player)
+	if not root or not services.FarmService.inOwnFarm(player, root.Position) then
+		return nil, "Go to Your Farm first."
+	end
+	local _ = session
+	return farm, nil
+end
+
+-- Collect and Sell are shared by the touch pads and the client's prompts.
 function GameService.collect(player: Player, source: string): Result
 	local session = services.DataService.getSession(player)
-	if not session or not session.plot then
-		return fail("Your sanctuary isn't ready yet.")
+	local farm = services.FarmService.farmOf(player)
+	if not session or not farm then
+		return fail("Your farm isn't ready yet.")
 	end
 	if source ~= "touch" then
-		local root = rootOf(player)
-		local wellPos = services.PlotService.wellPosition(session.plot)
-		if not root or (root.Position - wellPos).Magnitude > COLLECT_RANGE then
-			return fail("Walk up to your Spirit Well to collect.")
+		local box = Layout.boxWorld(farm)
+		if distanceTo(player, box) > GameConfig.CollectRange then
+			return fail("Walk up to your Orb Box to Collect.")
 		end
 	end
 	local ok, result = Actions.collect(session.profile, now())
 	if not ok then
 		return fail(result)
 	end
-	effectAll("Collect", { plot = session.plot, amount = result.amount, userId = player.UserId })
+	effectAll("Collected", { farm = farm, orbs = result.orbs, userId = player.UserId })
 	tutorialEvent(player, session, "collect")
+	changed(player)
+	return { ok = true, data = result }
+end
+
+function GameService.sell(player: Player, source: string): Result
+	local session = services.DataService.getSession(player)
+	if not session then
+		return fail("Your farm isn't ready yet.")
+	end
+	if source ~= "touch" and distanceTo(player, Layout.SellStand) > GameConfig.SellRange then
+		return fail("Bring your orbs to the Sell Stand in the plaza.")
+	end
+	local ok, result = Actions.sell(session.profile)
+	if not ok then
+		return fail(result)
+	end
+	effectAll("Sold", { userId = player.UserId, cash = result.cash, orbs = result.orbs })
+	tutorialEvent(player, session, "sell")
 	changed(player)
 	return { ok = true, data = result }
 end
@@ -108,67 +148,131 @@ handlers.Collect = function(player, _session, _payload)
 	return GameService.collect(player, "prompt")
 end
 
-handlers.Summon = function(player, session, payload)
-	if not summonLimiter:allow(player, os.clock()) then
-		return fail("The ritual circle needs a moment to recover.")
+handlers.Sell = function(player, _session, _payload)
+	return GameService.sell(player, "prompt")
+end
+
+handlers.BuyCrate = function(player, session, payload)
+	if type(payload.tier) ~= "string" or not Crates.get(payload.tier) then
+		return fail("Unknown crate.")
 	end
-	local banner = Banners.get(payload.banner)
-	if not banner then
-		return fail("Unknown ritual.")
+	if distanceTo(player, Layout.CrateShop) > GameConfig.ShopRange then
+		return fail("Visit the Crate Shop to Buy crates.")
 	end
-	local root = rootOf(player)
-	if not root or (root.Position - Layout.CourtyardCenter).Magnitude > Layout.SummonRadius then
-		return fail("Rituals can only be performed at the Summoning Courtyard.")
-	end
-	local ok, result = Actions.summon(session.profile, payload.banner, payload.count, rng, now())
+	local ok, result = Actions.buyCrate(session.profile, payload.tier)
 	if not ok then
 		return fail(result)
 	end
-	local best = "Common"
-	local bestRank = 0
-	for _, unit in result.units do
-		local rank = Rarities.rank(unit.rarity)
-		if rank > bestRank then
-			best, bestRank = unit.rarity, rank
-		end
+	effectAll("Bought", { userId = player.UserId, tier = result.tier })
+	tutorialEvent(player, session, "buyCrate")
+	changed(player)
+	return { ok = true, data = result }
+end
+
+handlers.PlaceCrate = function(player, session, payload)
+	if not isId(payload.cid) or not isInteger(payload.pad, 1, GameConfig.PadCount) then
+		return fail("Invalid placement.")
 	end
-	effectAll("Summon", { userId = player.UserId, rarity = best })
-	if bestRank >= 4 then
+	local farm, why = requireFarm(player, session)
+	if not farm then
+		return fail(why :: string)
+	end
+	local ok, result = Actions.placeCrate(session.profile, payload.cid, payload.pad, now())
+	if not ok then
+		return fail(result)
+	end
+	effectAll("CratePlaced", { farm = farm, pad = payload.pad })
+	tutorialEvent(player, session, "placeCrate")
+	changed(player, true)
+	return { ok = true, data = result }
+end
+
+handlers.PickUpCrate = function(player, session, payload)
+	if not isInteger(payload.pad, 1, GameConfig.PadCount) then
+		return fail("Invalid Crate Pad.")
+	end
+	local farm, why = requireFarm(player, session)
+	if not farm then
+		return fail(why :: string)
+	end
+	local ok, result = Actions.pickUpCrate(session.profile, payload.pad, now())
+	if not ok then
+		return fail(result)
+	end
+	changed(player, true)
+	return { ok = true, data = result }
+end
+
+handlers.OpenCrate = function(player, session, payload)
+	if not isInteger(payload.pad, 1, GameConfig.PadCount) then
+		return fail("Invalid Crate Pad.")
+	end
+	local farm, why = requireFarm(player, session)
+	if not farm then
+		return fail(why :: string)
+	end
+	local ok, result = Actions.openCrate(session.profile, payload.pad, rng, now())
+	if not ok then
+		return fail(result)
+	end
+	effectAll("CrateOpened", {
+		farm = farm,
+		pad = payload.pad,
+		tier = result.tier,
+		id = result.id,
+		rarity = result.rarity,
+		userId = player.UserId,
+	})
+	if Rarities.rank(result.rarity) >= 4 then
+		local def = Sorcerers.get(result.id)
 		for _, other in Players:GetPlayers() do
 			if other ~= player then
 				notify(other, "Toast", {
-					text = string.format("%s summoned a %s unit!", player.DisplayName, best),
+					text = string.format(
+						"%s opened a %s Sorcerer: %s!",
+						player.DisplayName,
+						result.rarity,
+						if def then def.name else "?"
+					),
 					tone = "rare",
 				})
 			end
 		end
 	end
-	tutorialEvent(player, session, "summon")
-	changed(player)
+	tutorialEvent(player, session, "openCrate")
+	changed(player, true)
 	return { ok = true, data = result }
 end
 
-handlers.Place = function(player, session, payload)
-	if not isUid(payload.uid) or not isInteger(payload.spot, 1, 10) then
+handlers.PlaceSorcerer = function(player, session, payload)
+	if not isId(payload.uid) or not isInteger(payload.slot, 1, GameConfig.SlotCount) then
 		return fail("Invalid placement.")
 	end
-	local ok, result = Actions.place(session.profile, payload.uid, payload.spot, now())
+	local farm, why = requireFarm(player, session)
+	if not farm then
+		return fail(why :: string)
+	end
+	local ok, result = Actions.placeSorcerer(session.profile, payload.uid, payload.slot, now())
 	if not ok then
 		return fail(result)
 	end
 	if not result.unchanged then
-		effectAll("Place", { plot = session.plot, spot = payload.spot })
-		tutorialEvent(player, session, "place")
+		effectAll("Placed", { farm = farm, slot = payload.slot })
+		tutorialEvent(player, session, "placeSorcerer")
 	end
 	changed(player, true)
 	return { ok = true, data = result }
 end
 
-handlers.Unplace = function(player, session, payload)
-	if not isInteger(payload.spot, 1, 10) then
-		return fail("Invalid spot.")
+handlers.PickUpSorcerer = function(player, session, payload)
+	if not isInteger(payload.slot, 1, GameConfig.SlotCount) then
+		return fail("Invalid slot.")
 	end
-	local ok, result = Actions.unplace(session.profile, payload.spot, now())
+	local farm, why = requireFarm(player, session)
+	if not farm then
+		return fail(why :: string)
+	end
+	local ok, result = Actions.pickUpSorcerer(session.profile, payload.slot, now())
 	if not ok then
 		return fail(result)
 	end
@@ -176,27 +280,28 @@ handlers.Unplace = function(player, session, payload)
 	return { ok = true, data = result }
 end
 
-handlers.Train = function(player, session, payload)
-	if not isUid(payload.uid) then
-		return fail("Invalid unit.")
+handlers.UpgradeSorcerer = function(player, session, payload)
+	if not isId(payload.uid) then
+		return fail("Invalid Sorcerer.")
 	end
-	local ok, result = Actions.train(session.profile, payload.uid, now())
+	local ok, result = Actions.upgradeSorcerer(session.profile, payload.uid, now())
 	if not ok then
 		return fail(result)
 	end
-	local spot = Actions.spotOf(session.profile, payload.uid)
-	if spot then
-		effectAll("Train", { plot = session.plot, spot = spot })
+	local slot = Actions.slotOf(session.profile, payload.uid)
+	local farm = services.FarmService.farmOf(player)
+	if slot and farm then
+		effectAll("Upgraded", { farm = farm, slot = slot })
 	end
 	changed(player, true)
 	return { ok = true, data = result }
 end
 
-handlers.Release = function(player, session, payload)
-	if not isUid(payload.uid) then
-		return fail("Invalid unit.")
+handlers.SellSorcerer = function(player, session, payload)
+	if not isId(payload.uid) then
+		return fail("Invalid Sorcerer.")
 	end
-	local ok, result = Actions.release(session.profile, payload.uid, now())
+	local ok, result = Actions.sellSorcerer(session.profile, payload.uid, now())
 	if not ok then
 		return fail(result)
 	end
@@ -204,31 +309,28 @@ handlers.Release = function(player, session, payload)
 	return { ok = true, data = result }
 end
 
-handlers.Upgrade = function(player, session, payload)
+handlers.BuyUpgrade = function(player, session, payload)
 	if type(payload.id) ~= "string" or not Upgrades.get(payload.id) then
 		return fail("Unknown upgrade.")
+	end
+	if distanceTo(player, Layout.UpgradeShop) > GameConfig.ShopRange then
+		return fail("Visit the Upgrade Shop to buy upgrades.")
 	end
 	local ok, result = Actions.buyUpgrade(session.profile, payload.id, now())
 	if not ok then
 		return fail(result)
 	end
-	tutorialEvent(player, session, "upgrade")
-	changed(player)
-	return { ok = true, data = result }
-end
-
-handlers.UnlockSpot = function(player, session, _payload)
-	local ok, result = Actions.unlockSpot(session.profile, now())
-	if not ok then
-		return fail(result)
+	if payload.id == "walkSpeed" then
+		services.FarmService.applyWalkSpeed(player)
 	end
-	effectAll("Unlock", { plot = session.plot, spot = result.spot })
+	tutorialEvent(player, session, "upgrade")
 	changed(player, true)
 	return { ok = true, data = result }
 end
 
-handlers.Travel = function(player, _session, payload)
-	return services.TravelService.travel(player, payload.destination)
+handlers.GoHome = function(player, _session, _payload)
+	services.FarmService.spawnAtFarm(player)
+	return { ok = true }
 end
 
 handlers.SkipTutorial = function(player, session, _payload)
@@ -266,14 +368,50 @@ local function onRequest(player: Player, action: any, payload: any): Result
 	end
 	local session = services.DataService.getSession(player)
 	if not session then
-		return fail("Your sanctuary is still loading...")
+		return fail("Your farm is still loading...")
 	end
 	local ok, result = pcall(handlers[action], player, session, payload)
 	if not ok then
-		warn("[Cursebound] Request", action, "failed:", result)
+		warn("[JJK Farm] Request", action, "failed:", result)
 		return fail("Something went wrong. Please try again.")
 	end
 	return result
+end
+
+-- Touch pads: stepping onto your Collect Pad or the Sell Stand's pad does the action.
+local function playerFromHit(hit: BasePart): Player?
+	local model = hit:FindFirstAncestorOfClass("Model")
+	return if model then Players:GetPlayerFromCharacter(model) else nil
+end
+
+local function connectTouchPads()
+	local map = workspace:FindFirstChild("JJKFarmMap")
+	if not map then
+		return
+	end
+	for _, part in map:GetDescendants() do
+		local kind = part:GetAttribute("TouchAction")
+		if part:IsA("BasePart") and kind then
+			part.Touched:Connect(function(hit)
+				local player = playerFromHit(hit)
+				if not player or not touchLimiter:allow(player, os.clock()) then
+					return
+				end
+				if kind == "Sell" then
+					local session = services.DataService.getSession(player)
+					if session and session.profile.carried.orbs >= 1 then
+						GameService.sell(player, "touch")
+					end
+				elseif kind == "Collect" then
+					local farmIndex = part:GetAttribute("Farm")
+					if farmIndex == services.FarmService.farmOf(player) then
+						local result = GameService.collect(player, "touch")
+						local _ = result
+					end
+				end
+			end)
+		end
+	end
 end
 
 function GameService.init(registry: any)
@@ -282,39 +420,67 @@ end
 
 function GameService.start()
 	services.Remotes.Request.OnServerInvoke = onRequest
+	connectTouchPads()
 
 	services.DataService.Loaded:Connect(function(player: Player, session: any)
-		local plot = services.PlotService.assign(player)
-		session.plot = plot
-		if not plot then
+		local farm = services.FarmService.assign(player)
+		if not farm then
 			notify(
 				player,
 				"Toast",
-				{ text = "All sanctuaries are taken on this server. Try another server!", tone = "bad" }
+				{ text = "Every farm on this server is taken. Try another server!", tone = "bad" }
 			)
 		end
-		services.PlotService.render(player)
+		services.FarmService.render(player)
 		services.StateService.pushNow(player)
+		services.FarmService.spawnAtFarm(player)
 		if not services.DataService.persistent then
 			notify(player, "StudioMode", {})
 		end
-		if session.offlineGain >= 1 and session.offlineSeconds > 60 then
+		local report = session.offline
+		if report and report.seconds >= 60 and (report.orbs >= 1 or report.cratesReady > 0) then
+			local parts = {}
+			if report.orbs >= 1 then
+				table.insert(
+					parts,
+					string.format(
+						"your Sorcerers made %s Cursed Orbs (%s)",
+						Format.commas(report.orbs),
+						Format.cash(report.value)
+					)
+				)
+			end
+			if report.cratesReady > 0 then
+				table.insert(
+					parts,
+					string.format(
+						"%d Crate%s finished opening",
+						report.cratesReady,
+						if report.cratesReady == 1 then "" else "s"
+					)
+				)
+			end
 			notify(player, "Offline", {
-				amount = math.floor(session.offlineGain),
+				seconds = report.seconds,
+				counted = report.counted,
+				capped = report.capped,
+				boxFull = report.boxFull,
+				orbs = math.floor(report.orbs),
+				value = report.value,
+				cratesReady = report.cratesReady,
 				text = string.format(
-					"While you were away (%s), your spirits gathered %s energy into the well.",
-					Format.duration(session.offlineSeconds),
-					Format.abbreviate(session.offlineGain)
+					"While you were away (%s), %s.",
+					Format.duration(report.seconds),
+					table.concat(parts, " and ")
 				),
 			})
 		end
-		services.TravelService.onLoaded(player, session)
 	end)
 
 	services.DataService.Removing:Connect(function(player: Player)
-		services.PlotService.release(player)
+		services.FarmService.release(player)
 		requestLimiter:remove(player)
-		summonLimiter:remove(player)
+		touchLimiter:remove(player)
 	end)
 end
 

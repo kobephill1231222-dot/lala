@@ -1,15 +1,16 @@
 --!nocheck
 -- Client smoke test: runs the real client scripts (StarterPlayerScripts.Client) inside Lune
--- with a stubbed engine, feeds them a profile and drives every panel, placement, effects,
--- notifications and the recruitment reveal. Fails on any runtime error.
--- Usage: lune run tools/lune/client_smoke.luau build/baked.rbxl
+-- with a stubbed engine, feeds them a profile and drives every panel, prompt, placement,
+-- production animation, effect, notification, tutorial step and the crate reveal.
+-- Fails on any runtime error.
+-- Usage: lune run tools/lune/client_smoke.luau dist/JJKFarm.rbxl
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 local task = require("@lune/task")
 local Sandbox = require("./lib/Sandbox")
 local EngineShim = require("./lib/EngineShim")
 
-local game = Sandbox.loadPlace(process.args[1] or "build/baked.rbxl")
+local game = Sandbox.loadPlace(process.args[1] or "dist/JJKFarm.rbxl")
 local Signal = EngineShim.Signal
 local errors = {}
 
@@ -44,6 +45,7 @@ for _, pair in
 		{ "UserInputService", "InputChanged" },
 		{ "UserInputService", "LastInputTypeChanged" },
 		{ "Instance", "ChildAdded" },
+		{ "Instance", "ChildRemoved" },
 	}
 do
 	roblox.implementProperty(pair[1], pair[2], function(inst)
@@ -57,18 +59,23 @@ roblox.implementMethod("Instance", "GetAttributeChangedSignal", function(inst, a
 	return instanceSignal(inst, "attr_" .. attr)
 end)
 -- A canned server: realistic shapes for every action's result.
+local NOW = 1_700_000_000
 local CANNED = {
-	Summon = { units = { { uid = "7", id = "kagerou", rarity = "Epic", isNew = true } } },
-	Train = { uid = "2", level = 4, cost = 100 },
-	Upgrade = { id = "production", level = 1, cost = 40 },
-	UnlockSpot = { spot = 3, cost = 120 },
-	Release = { uid = "2", value = 80 },
-	Place = { spot = 3 },
-	Unplace = { spot = 2, uid = "2" },
-	Collect = { amount = 60 },
-	Travel = { destination = "Home" },
+	OpenCrate = { uid = "9", id = "ryo", rarity = "Epic", isNew = true, tier = "rare", pad = 1 },
+	BuyCrate = { cid = "8", tier = "basic", cost = 60 },
+	PlaceCrate = { cid = "5", pad = 2, readyAt = NOW + 90, duration = 90 },
+	PickUpCrate = { cid = "4", tier = "basic", pad = 1 },
+	PlaceSorcerer = { slot = 2, uid = "3" },
+	PickUpSorcerer = { slot = 1, uid = "2" },
+	UpgradeSorcerer = { uid = "2", level = 4, cost = 100 },
+	SellSorcerer = { uid = "3", id = "yoru", value = 60000 },
+	BuyUpgrade = { id = "orbValue", level = 2, cost = 36 },
+	Collect = { orbs = 20, value = 40, carried = 20 },
+	Sell = { orbs = 20, cash = 40 },
 }
+local invoked = {}
 roblox.implementMethod("RemoteFunction", "InvokeServer", function(_, action, _payload)
+	invoked[action] = (invoked[action] or 0) + 1
 	return { ok = true, data = CANNED[action] or {} }
 end)
 roblox.implementMethod("RemoteEvent", "FireServer", function() end)
@@ -155,7 +162,9 @@ player.Parent = players
 players.LocalPlayer = player
 local playerGui = roblox.Instance.new("PlayerGui")
 playerGui.Parent = player
-local character = EngineShim.spawnCharacter(game, player, roblox.Vector3.new(0, 9, 176))
+local helper = Sandbox.new(game)
+local Layout = helper.requirePath("ReplicatedStorage/Shared/Config/FarmLayout")
+local character = EngineShim.spawnCharacter(game, player, Layout.homeCFrame(1).Position)
 local camera = instanceNew("Camera")
 camera.Parent = game:GetService("Workspace")
 game:GetService("Workspace").CurrentCamera = camera
@@ -163,11 +172,6 @@ local uis = game:GetService("UserInputService")
 uis.TouchEnabled = false
 uis.KeyboardEnabled = true
 uis.MouseEnabled = true
-local curses = roblox.Instance.new("Folder")
-curses.Name = "Curses"
-curses.Parent = game:GetService("Workspace")
-
-local helper = Sandbox.new(game)
 local Net = helper.requirePath("ReplicatedStorage/Shared/Net")
 local remotesFolder = roblox.Instance.new("Folder")
 remotesFolder.Name = Net.FolderName
@@ -178,7 +182,6 @@ for name, className in
 		State = "RemoteEvent",
 		Notify = "RemoteEvent",
 		Effect = "RemoteEvent",
-		Ability = "RemoteEvent",
 	}
 do
 	local remote = roblox.Instance.new(className)
@@ -221,6 +224,51 @@ local function frames(n)
 	task.wait(0.05)
 end
 
+-- Simulate what the server puts on the map: runtime folders on every farm, Farm 1 owned by
+-- the tester with two Sorcerers working and a crate opening, and its Orb Box numbers.
+local CharacterModels = helper.requirePath("ReplicatedStorage/Shared/Visuals/CharacterModels")
+local CrateModels = helper.requirePath("ReplicatedStorage/Shared/Visuals/CrateModels")
+local farmsFolder = game:GetService("Workspace").JJKFarmMap.Farms
+for index = 1, Layout.FarmCount do
+	local farm = farmsFolder["Farm" .. index]
+	local runtime = roblox.Instance.new("Folder")
+	runtime.Name = "Runtime"
+	runtime.Parent = farm
+	for _, name in { "Sorcerers", "Crates" } do
+		local f = roblox.Instance.new("Folder")
+		f.Name = name
+		f.Parent = runtime
+	end
+end
+local farm1 = farmsFolder.Farm1
+farm1:SetAttribute("OwnerId", 4242)
+farm1:SetAttribute("OwnerName", "Tester")
+farm1:SetAttribute("Ops", 2.4)
+farm1:SetAttribute("CashRate", 40)
+farm1:SetAttribute("BoxOrbs", 12)
+farm1:SetAttribute("BoxValue", 30)
+farm1:SetAttribute("BoxT", NOW)
+farm1:SetAttribute("BoxCap", 60)
+for slot, id in { [1] = "suzu", [2] = "yoru" } do
+	local model = CharacterModels.build(
+		id,
+		Layout.slotWorld(1, slot) * roblox.CFrame.new(0, 0.5, 0),
+		{ aura = true, scale = CharacterModels.FarmScale }
+	)
+	model.Name = "Sorcerer" .. slot
+	model:SetAttribute("SorcererId", id)
+	model:SetAttribute("Slot", slot)
+	model:SetAttribute("Farm", 1)
+	model:SetAttribute("Level", 3)
+	model.Parent = farm1.Runtime.Sorcerers
+end
+local crateModel = CrateModels.build("basic", Layout.padWorld(1, 1) * roblox.CFrame.new(0, 0.6, 0))
+crateModel.Name = "Crate1"
+crateModel:SetAttribute("ReadyAt", NOW + 20)
+crateModel:SetAttribute("Farm", 1)
+crateModel:SetAttribute("Pad", 1)
+crateModel.Parent = farm1.Runtime.Crates
+
 step("client boots", function()
 	sb.run(client.Main)
 	task.wait(0.3)
@@ -230,87 +278,159 @@ local function req(path)
 	return sb.requirePath("StarterPlayer/StarterPlayerScripts/Client/" .. path)
 end
 local Schema = sb.requirePath("ReplicatedStorage/Shared/Rules/ProfileSchema")
+local Tutorial = sb.requirePath("ReplicatedStorage/Shared/Rules/Tutorial")
 local UIController = req("Controllers/UIController")
 local PlacementController = req("Controllers/PlacementController")
 local RevealController = req("Controllers/RevealController")
 local StateController = req("Controllers/StateController")
-local CombatController = req("Controllers/CombatController")
+local ProductionController = req("Controllers/ProductionController")
+local WorldController = req("Controllers/WorldController")
 
-local profile = Schema.publicView(Schema.new(1_700_000_000))
-profile.units["2"] = { id = "suzu", level = 3 }
-profile.units["3"] = { id = "yoru", level = 1 }
-profile.spots["2"] = "2"
-profile.discovered.suzu = true
-profile.discovered.yoru = true
-profile.energy = 5000
-profile.seals = 20
-profile.plot = 1
-profile.serverTime = 1_700_000_000
+local raw = Schema.new(NOW)
+raw.units["2"] = { id = "suzu", level = 3 }
+raw.units["3"] = { id = "yoru", level = 1 }
+raw.units["6"] = { id = "kai", level = 1 }
+raw.slots["1"] = "2"
+raw.crates["1"] = nil
+raw.crates["4"] = { tier = "basic", pad = 1, readyAt = NOW + 20 }
+raw.crates["5"] = { tier = "rare" }
+raw.discovered.suzu = true
+raw.discovered.yoru = true
+raw.cash = 1e6
+raw.box = { orbs = 12, value = 30, t = NOW }
+local profile = Schema.publicView(raw)
+profile.farm = 1
+profile.serverTime = NOW
 profile.persistent = true
 local stateRemote = remotesFolder.State
 local notifyRemote = remotesFolder.Notify
 local effectRemote = remotesFolder.Effect
 
-step("receives first state snapshot", function()
+local function push()
 	stateRemote.OnClientEvent:FireSync(profile)
+	task.wait(0.05)
+end
+
+step("receives first state snapshot", function()
+	push()
 	task.wait(0.3)
 	frames(5)
 	assert(StateController.profile ~= nil, "profile not stored")
+	assert(StateController.farm() == 1, "farm not known")
 end)
-step("HUD exists", function()
-	local gui = playerGui:FindFirstChild("CurseboundUI")
+step("HUD shows Cash, income and the Orb Box", function()
+	local gui = playerGui:FindFirstChild("JJKFarmUI")
 	assert(gui and gui:FindFirstChild("HUD", true), "HUD missing")
+	frames(30)
+	local cash = gui:FindFirstChild("Cash", true)
+	assert(cash and string.find(cash.Text, "%$"), "cash label: " .. tostring(cash and cash.Text))
+	local count = gui:FindFirstChild("OrbBoxCard", true):FindFirstChild("Count")
+	assert(count and string.find(count.Text, "/ 60"), "box label: " .. tostring(count and count.Text))
 end)
-step("own plot prompts created", function()
+step("Your Farm prompts created (pads, slots, Orb Box)", function()
 	task.wait(0.2)
+	frames(3)
 	local count = 0
-	for _, d in game:GetService("Workspace").CurseboundMap.Sanctuaries.Sanctuary1:GetDescendants() do
+	for _, d in farm1:GetDescendants() do
 		if d:IsA("ProximityPrompt") then
 			count += 1
 		end
 	end
-	assert(count >= 11, "expected well + 10 spot prompts, got " .. count)
+	assert(count == 4 * 2 + 10 * 2 + 1, "prompts on Farm 1: " .. count)
+	assert(farm1.Sign.SignGui.Title.Text == "Your Farm", "sign: " .. farm1.Sign.SignGui.Title.Text)
 end)
-for _, panel in { "Summon", "Units", "Upgrades", "Travel", "Settings" } do
+step("plaza prompts created (Sell, Buy, shops)", function()
+	local count = 0
+	for _, d in game:GetService("Workspace").JJKFarmMap.Plaza:GetDescendants() do
+		if d:IsA("ProximityPrompt") then
+			count += 1
+		end
+	end
+	assert(count == 1 + 4 * 2 + 1 + 2, "plaza prompts: " .. count)
+end)
+step("prompt texts use the game's words", function()
+	local pad1 = WorldController.padPrompt(1)
+	local pad2 = WorldController.padPrompt(2)
+	local pad3 = WorldController.padPrompt(3)
+	local slot1 = WorldController.slotPrompt(1)
+	local slot2 = WorldController.slotPrompt(2)
+	local slot5 = WorldController.slotPrompt(5)
+	assert(pad1.ActionText == "Open" and pad1.Enabled == false, "pad1 " .. pad1.ActionText)
+	assert(
+		pad2.ActionText == "Place" and pad2.ObjectText == "Rare Crate",
+		"pad2 " .. pad2.ActionText .. " " .. pad2.ObjectText
+	)
+	assert(pad3.ActionText == "Upgrade" and pad3.ObjectText == "More Crate Pads", "pad3 " .. pad3.ObjectText)
+	assert(slot1.ActionText == "Upgrade", "slot1 " .. slot1.ActionText)
+	assert(slot2.ActionText == "Place" and slot2.ObjectText == "Yoru", "slot2 " .. slot2.ObjectText)
+	assert(slot5.ActionText == "Upgrade" and slot5.ObjectText == "More Slots", "slot5 " .. slot5.ObjectText)
+end)
+step("production: techniques fire and Cursed Orbs travel the lane into the Orb Box", function()
+	local fx = ProductionController.farmFx(1)
+	assert(fx, "farm 1 not tracked")
+	local workers = 0
+	for _ in fx.workers do
+		workers += 1
+	end
+	assert(workers == 2, "workers: " .. workers)
+	local maxOrbs = 0
+	for _ = 1, 150 do
+		frames(1)
+		maxOrbs = math.max(maxOrbs, ProductionController.orbCount())
+	end
+	assert(maxOrbs > 0, "no orbs were produced")
+	local fill = farm1.OrbBox.Fill
+	assert(fill.Size.Y > 0.5, "box fill didn't rise: " .. fill.Size.Y)
+end)
+step("crate timer label counts down", function()
+	local found = false
+	for _, d in playerGui.WorldLabels:GetDescendants() do
+		if d:IsA("TextLabel") and string.find(d.Text, "Opening Time") then
+			found = true
+		end
+	end
+	assert(found, "no Opening Time label")
+end)
+for _, panel in { "Sorcerers", "Crates", "CrateShop", "UpgradeShop", "Settings" } do
 	step("open panel " .. panel, function()
 		UIController.open(panel)
 		task.wait(0.05)
 		frames(3)
-		stateRemote.OnClientEvent:FireSync(profile)
-		task.wait(0.05)
+		push()
 		UIController.close()
 	end)
 end
-step("units panel in pick-spot mode", function()
-	UIController.open("Units", { pickSpot = 3 })
-	task.wait(0.05)
-	UIController.close()
-	UIController.open("Units", { uid = "3" })
-	task.wait(0.05)
-	UIController.close()
-end)
 step("all panel buttons can be activated", function()
-	for _, panel in { "Units", "Upgrades", "Settings", "Summon" } do
+	for _, panel in { "Sorcerers", "Crates", "CrateShop", "UpgradeShop", "Settings" } do
 		UIController.open(panel)
 		task.wait(0.05)
-		local buttons = {}
-		for _, d in playerGui.CurseboundUI.Panels:GetDescendants() do
-			if d:IsA("TextButton") and d.Name == "Button" then
-				local label = d:FindFirstChild("Label")
-				local text = label and label.Text or ""
-				-- Skip travel/close/placement/summon buttons (they yield or leave the panel)
-				if
-					not string.find(text, "Travel")
-					and text ~= "X"
-					and not string.find(text, "Place")
-					and not string.find(text, "Summon")
-				then
-					table.insert(buttons, d)
+		local buttons, last = {}, {}
+		for _, root in playerGui.JJKFarmUI.Panels:GetChildren() do
+			if root.Name == "Panel" and root.Visible then
+				for _, d in root:GetDescendants() do
+					if d:IsA("TextButton") and d.Name == "Button" then
+						local label = d:FindFirstChild("Label")
+						local text = label and label.Text or ""
+						-- Skip close, placement and travel buttons (they leave the panel or yield);
+						-- press Sell last since it removes the selected Sorcerer.
+						if string.find(text, "^Sell") then
+							table.insert(last, d)
+						elseif
+							text ~= "X"
+							and text ~= "Place"
+							and not string.find(text, "Walk")
+							and not string.find(text, "Your Farm")
+						then
+							table.insert(buttons, d)
+						end
+					end
 				end
 			end
 		end
+		for _, d in last do
+			table.insert(buttons, d)
+		end
 		for _, button in buttons do
-			-- Earlier clicks may rebuild the panel; destroyed buttons are skipped.
 			local ok, parent = pcall(function()
 				return button.Parent
 			end)
@@ -321,48 +441,101 @@ step("all panel buttons can be activated", function()
 		task.wait(0.05)
 		UIController.close()
 	end
+	assert((invoked.UpgradeSorcerer or 0) > 0, "Upgrade never requested")
+	assert((invoked.SellSorcerer or 0) > 0, "Sell never requested")
 end)
-step("placement mode begins and cancels", function()
-	PlacementController.begin("3")
-	task.wait(0.1)
+step("world prompts send the right requests", function()
+	for _, pair in { { "slot", 2 }, { "slot", 1 }, { "pad", 2 } } do
+		local prompt = if pair[1] == "slot"
+			then WorldController.slotPrompt(pair[2])
+			else WorldController.padPrompt(pair[2])
+		prompt.Triggered:FireSync()
+	end
+	assert(invoked.PlaceSorcerer and invoked.PlaceCrate, "place requests missing")
+	for _, d in farm1:GetDescendants() do
+		if d:IsA("ProximityPrompt") and (d.Name == "PickUpPrompt" or d.Name == "CollectPrompt") then
+			d.Triggered:FireSync()
+		end
+	end
+	assert(
+		invoked.PickUpSorcerer and invoked.PickUpCrate and invoked.Collect,
+		"pick up / collect requests missing"
+	)
+	for _, d in game:GetService("Workspace").JJKFarmMap.Plaza:GetDescendants() do
+		if d:IsA("ProximityPrompt") then
+			d.Triggered:FireSync()
+			UIController.close(true)
+		end
+	end
+	assert(invoked.BuyCrate and invoked.Sell, "buy / sell requests missing")
+end)
+step("placement: Sorcerer preview on a slot, Place", function()
+	PlacementController.beginSorcerer("3")
+	task.wait(0.4)
 	frames(3)
 	assert(PlacementController.isActive(), "placement not active")
+	assert(
+		PlacementController.selected() == 2,
+		"expected first empty slot preselected, got " .. tostring(PlacementController.selected())
+	)
+	local ghost = false
+	for _, child in game:GetService("Workspace"):GetChildren() do
+		if child.Name == "yoru" then
+			ghost = true
+		end
+	end
+	assert(ghost, "no ghost preview")
+	PlacementController.confirm()
+	assert(not PlacementController.isActive(), "placement didn't finish")
+end)
+step("placement: Crate preview on a pad, cancel", function()
+	PlacementController.beginCrate("5")
+	task.wait(0.4)
+	frames(3)
+	assert(
+		PlacementController.isActive() and PlacementController.mode() == "crate",
+		"crate placement not active"
+	)
 	PlacementController.cancel()
 end)
 step("server effects render", function()
-	effectRemote.OnClientEvent:FireSync("Collect", { plot = 1, amount = 120, userId = 4242 })
-	effectRemote.OnClientEvent:FireSync("Summon", { userId = 1, rarity = "Legendary" })
-	effectRemote.OnClientEvent:FireSync("Place", { plot = 1, spot = 2 })
-	effectRemote.OnClientEvent:FireSync("Unlock", { plot = 1, spot = 3 })
-	effectRemote.OnClientEvent:FireSync("Train", { plot = 1, spot = 2 })
-	effectRemote.OnClientEvent:FireSync("Cast", {
-		userId = 9,
-		ability = "burst",
-		origin = roblox.Vector3.new(0, 3, -150),
-		direction = roblox.Vector3.new(0, 0, -1),
-	})
+	local V3 = roblox.Vector3.new
+	effectRemote.OnClientEvent:FireSync("Collected", { farm = 1, orbs = 20, userId = 4242 })
+	effectRemote.OnClientEvent:FireSync("Sold", { userId = 4242, cash = 40, orbs = 20 })
+	effectRemote.OnClientEvent:FireSync("Placed", { farm = 1, slot = 2 })
+	effectRemote.OnClientEvent:FireSync("Upgraded", { farm = 1, slot = 1 })
+	effectRemote.OnClientEvent:FireSync("CratePlaced", { farm = 1, pad = 2 })
+	effectRemote.OnClientEvent:FireSync("Bought", { userId = 1, tier = "rare" })
 	effectRemote.OnClientEvent:FireSync(
-		"Hits",
-		{ ability = "strike", hits = { { position = roblox.Vector3.new(0, 3, -150), damage = 15 } } }
+		"CrateOpened",
+		{ farm = 1, pad = 1, tier = "epic", id = "shion", rarity = "Legendary", userId = 1 }
 	)
-	effectRemote.OnClientEvent:FireSync(
-		"CurseDeath",
-		{ position = roblox.Vector3.new(0, 3, -150), enemy = "gloomling" }
-	)
-	effectRemote.OnClientEvent:FireSync(
-		"CurseStrike",
-		{ position = roblox.Vector3.new(0, 3, -150), radius = 6, enemy = "brute" }
-	)
-	task.wait(0.2)
-	frames(10)
+	for _ = 1, 90 do
+		frames(1)
+	end
+	local _ = V3
 end)
 step("notifications become toasts", function()
 	for _, n in
 		{
 			{ "Toast", { text = "Hello", tone = "bad" } },
-			{ "Kill", { name = "Gloomling", energy = 50, seals = 1 } },
-			{ "TutorialStep", { completed = "Gather", reward = { energy = 60 }, nextStep = 6 } },
-			{ "Offline", { amount = 100, text = "Welcome back" } },
+			{ "TutorialStep", { completed = "Sell your orbs", reward = { cash = 50 }, nextStep = 6 } },
+			{
+				"TutorialStep",
+				{ completed = "Upgrade your farm", reward = { cash = 50 }, nextStep = Tutorial.Done },
+			},
+			{
+				"Offline",
+				{
+					seconds = 3600,
+					orbs = 60,
+					value = 120,
+					cratesReady = 1,
+					capped = false,
+					boxFull = true,
+					text = "While you were away (1h 00m), ...",
+				},
+			},
 			{ "StudioMode", {} },
 		}
 	do
@@ -370,47 +543,40 @@ step("notifications become toasts", function()
 	end
 	task.wait(0.1)
 end)
-step("tutorial guidance follows steps", function()
-	for stepIndex = 1, 6 do
+step("tutorial guidance follows every step", function()
+	for stepIndex = 1, Tutorial.Done do
 		profile.tutorial = stepIndex
-		stateRemote.OnClientEvent:FireSync(profile)
-		task.wait(0.05)
+		profile.cash = if stepIndex % 2 == 0 then 0 else 1e6
+		push()
 		frames(2)
 	end
+	profile.carried = { orbs = 20, value = 40 }
+	push()
+	frames(20)
+	profile.carried = { orbs = 0, value = 0 }
+	profile.cash = 1e6
+	push()
 end)
-step("combat bar in the forest", function()
-	character:PivotTo(roblox.CFrame.new(0, 3, -150))
-	frames(12)
-	CombatController.use("strike")
-	CombatController.use("lance")
-	CombatController.use("burst")
-	frames(3)
-end)
-step("recruitment reveal plays through", function()
+step("crate reveal plays through to Place", function()
+	profile.units["9"] = { id = "ryo", level = 1 }
+	push()
 	local done = false
 	task.spawn(function()
-		RevealController.play({
-			units = {
-				{ uid = "7", id = "kagerou", rarity = "Epic", isNew = true },
-				{ uid = "8", id = "kokuyo", rarity = "Mythic", isNew = true },
-			},
-		}, function()
-			done = true
-		end)
+		RevealController.play(
+			{ uid = "9", id = "ryo", rarity = "Epic", isNew = true, tier = "rare", pad = 1 },
+			function()
+				done = true
+			end
+		)
 	end)
-	local input =
-		{ UserInputType = roblox.Enum.UserInputType.MouseButton1, KeyCode = roblox.Enum.KeyCode.Unknown }
-	for _ = 1, 40 do
-		task.wait(0.15)
-		uis.InputBegan:FireSync(input, false)
+	for _ = 1, 200 do
 		frames(1)
-		-- Press "Summon more" on the wrap-up card when it appears
 		local reveal = playerGui:FindFirstChild("Reveal")
-		if reveal then
+		if reveal and reveal:FindFirstChild("RevealCard", true) then
 			for _, d in reveal:GetDescendants() do
 				if d:IsA("TextButton") and d.Name == "Button" then
 					local label = d:FindFirstChild("Label")
-					if label and label.Text == "Summon more" then
+					if label and label.Text == "Place" then
 						d.Activated:FireSync()
 					end
 				end
@@ -421,7 +587,21 @@ step("recruitment reveal plays through", function()
 		end
 	end
 	assert(done, "reveal did not finish")
+	task.wait(0.4)
+	frames(3)
+	assert(PlacementController.isActive(), "Place on the reveal card should start placement")
+	PlacementController.cancel()
+end)
+step("menu hotkeys and Home", function()
+	for _, key in { "G", "C", "B", "U", "H" } do
+		uis.InputBegan:FireSync(
+			{ KeyCode = roblox.Enum.KeyCode[key], UserInputType = roblox.Enum.UserInputType.Keyboard },
+			false
+		)
+		task.wait(0.02)
+	end
 	UIController.close(true)
+	assert(invoked.GoHome, "Home not requested")
 end)
 
 print(string.format("\nClient smoke: %d failure(s)", #errors))

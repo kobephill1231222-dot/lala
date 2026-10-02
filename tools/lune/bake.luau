@@ -1,10 +1,9 @@
 --!nocheck
--- Bakes the village into the place file and exports a preview scene.
+-- Bakes the JJK Farm map into the place file and exports a preview scene.
 -- Usage: lune run tools/lune/bake.luau <in.rbxl> <out.rbxl> [preview.json]
 --
--- Runs the real Map modules (ServerScriptService.Server.Map) against the place's DataModel.
--- Parts and lighting are baked; terrain is recorded for the preview only, because voxel data
--- can't be written offline (the server generates it on startup, or bake it in Studio).
+-- Runs the real Map modules (ServerScriptService.Server.Map) against the place's DataModel,
+-- so the .rbxl opens in Studio with the whole map and lighting already in place.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
@@ -13,18 +12,19 @@ local Sandbox = require("./lib/Sandbox")
 local Export = require("./lib/Export")
 
 local input = process.args[1] or "build/game.rbxl"
-local output = process.args[2] or "dist/CurseboundFarm.rbxl"
+local output = process.args[2] or "dist/JJKFarm.rbxl"
 local previewPath = process.args[3]
 
 local game = Sandbox.loadPlace(input)
 local sb = Sandbox.new(game)
 local MapBuilder = sb.requirePath("ServerScriptService/Server/Map/MapBuilder")
-local TerrainPlan = sb.requirePath("ServerScriptService/Server/Map/TerrainPlan")
 
 local workspace = game:GetService("Workspace")
-local existing = workspace:FindFirstChild("CurseboundMap")
-if existing then
-	existing:Destroy()
+for _, name in { "JJKFarmMap", "CurseboundMap" } do
+	local existing = workspace:FindFirstChild(name)
+	if existing then
+		existing:Destroy()
+	end
 end
 
 local started = os.clock()
@@ -32,11 +32,21 @@ local map = MapBuilder.buildStructures(workspace)
 MapBuilder.applyLighting(game:GetService("Lighting"))
 print(string.format("Built map in %.2fs", os.clock() - started))
 
--- Statistics: parts per district, lights, emitters
+-- Statistics per top-level group
 local totalParts, totalLights, totalEmitters = 0, 0, 0
-for _, district in map:GetChildren() do
+local groups = {}
+for _, g in map:GetChildren() do
+	if g.Name == "Farms" then
+		for _, f in g:GetChildren() do
+			table.insert(groups, f)
+		end
+	else
+		table.insert(groups, g)
+	end
+end
+for _, group in groups do
 	local parts, lights = 0, 0
-	for _, d in district:GetDescendants() do
+	for _, d in group:GetDescendants() do
 		if d:IsA("BasePart") then
 			parts += 1
 		elseif d:IsA("PointLight") then
@@ -47,7 +57,7 @@ for _, district in map:GetChildren() do
 	end
 	totalParts += parts
 	totalLights += lights
-	print(string.format("  %-14s %5d parts  %3d lights", district.Name, parts, lights))
+	print(string.format("  %-14s %5d parts  %3d lights", group.Name, parts, lights))
 end
 print(
 	string.format(
@@ -58,89 +68,74 @@ print(
 	)
 )
 
--- Sanity checks that services rely on
+-- Sanity checks for the names services and the client rely on
 local function require_(cond, msg)
 	if not cond then
 		error("bake check failed: " .. msg)
 	end
 end
-local sanctuaries = map:FindFirstChild("Sanctuaries")
-require_(sanctuaries and #sanctuaries:GetChildren() == 6, "six sanctuaries")
-for _, s in sanctuaries:GetChildren() do
-	require_(
-		s:FindFirstChild("Well") and s.Well:FindFirstChild("Core") and s.Well:FindFirstChild("Sensor"),
-		s.Name .. " well"
-	)
-	require_(s:FindFirstChild("Spots") and #s.Spots:GetChildren() == 10, s.Name .. " spots")
-	for _, spot in s.Spots:GetChildren() do
+local farms = map:FindFirstChild("Farms")
+require_(farms and #farms:GetChildren() == 6, "six farms")
+for _, farm in farms:GetChildren() do
+	local n = farm.Name
+	local sign = farm:FindFirstChild("Sign")
+	require_(sign and sign:FindFirstChild("SignGui") and sign.SignGui:FindFirstChild("Title"), n .. " sign")
+	require_(farm:FindFirstChild("Slots") and #farm.Slots:GetChildren() == 10, n .. " slots")
+	for _, slot in farm.Slots:GetChildren() do
+		if slot.Name:match("^Slot%d+$") then
+			require_(
+				slot:FindFirstChild("Ring") and slot:FindFirstChild("Lock") and slot:GetAttribute("Slot"),
+				slot:GetFullName()
+			)
+		end
+	end
+	require_(farm:FindFirstChild("Pads") and #farm.Pads:GetChildren() == 4, n .. " pads")
+	for _, pad in farm.Pads:GetChildren() do
 		require_(
-			spot:FindFirstChild("Anchor") and spot:FindFirstChild("Ring") and spot:FindFirstChild("Seal"),
-			spot:GetFullName()
+			pad:FindFirstChild("Ring") and pad:FindFirstChild("Lock") and pad:GetAttribute("Pad"),
+			pad:GetFullName()
 		)
 	end
-	require_(s:FindFirstChild("Sign", true) and s:FindFirstChild("OwnerLabel", true), s.Name .. " sign")
+	local box = farm:FindFirstChild("OrbBox")
+	require_(box and box:FindFirstChild("Fill") and box:FindFirstChild("LabelAnchor"), n .. " orb box")
+	require_(
+		farm:FindFirstChild("Lane") and farm.Lane:FindFirstChild("Belt") and farm.Lane:FindFirstChild("Slats"),
+		n .. " lane"
+	)
+	local pad = farm:FindFirstChild("CollectPad")
+	require_(
+		pad and pad:GetAttribute("TouchAction") == "Collect" and pad:GetAttribute("Farm"),
+		n .. " collect pad"
+	)
+	require_(farm:FindFirstChild("StatsBoard", true), n .. " stats board")
 end
+local plaza = map:FindFirstChild("Plaza")
+require_(plaza, "plaza")
 require_(
-	map:FindFirstChild("Forest")
-		and map.Forest:FindFirstChild("Spawns")
-		and #map.Forest.Spawns:GetChildren() > 0,
-	"forest spawns"
+	plaza.SellStand:FindFirstChild("SellPad")
+		and plaza.SellStand.SellPad:GetAttribute("TouchAction") == "Sell",
+	"sell pad"
 )
-require_(map:FindFirstChild("Dojo") and map.Dojo:FindFirstChild("Dummies"), "dojo dummies")
-require_(map:FindFirstChild("Shop") and map.Shop:FindFirstChild("Counter"), "shop counter")
 require_(
-	map:FindFirstChild("Courtyard")
-		and map.Courtyard:FindFirstChild("Circle")
-		and map.Courtyard:FindFirstChild("Altar"),
-	"courtyard"
+	plaza.CrateShop:FindFirstChild("Displays") and #plaza.CrateShop.Displays:GetChildren() == 4,
+	"crate displays"
 )
-require_(map:FindFirstChild("ArrivalSpawn", true), "spawn location")
+require_(
+	plaza.CrateShop:FindFirstChild("Counter") and plaza.UpgradeShop:FindFirstChild("Counter"),
+	"shop counters"
+)
+require_(plaza.UpgradeShop:FindFirstChild("UpgradeBoard"), "upgrade board")
+require_(plaza:FindFirstChild("Spawn"), "spawn location")
 
 fs.writeDir("dist")
 fs.writeFile(output, roblox.serializePlace(game))
 print("Wrote " .. output)
 
 if previewPath then
+	local Stage = require("./lib/Stage")
+	local stage = Stage.build(sb, map)
 	local scene = Export.collect(map)
-	local ops = MapBuilder.terrainOps()
-	local terrainOps = {}
-	local function vec(v)
-		return { v.X, v.Y, v.Z }
-	end
-	for _, op in ops do
-		local entry = { m = op.material.Name, paint = op.paint == true }
-		if op.kind == "ball" then
-			entry.k, entry.p, entry.radius = "ball", vec(op.center), op.radius
-		elseif op.kind == "cyl" then
-			entry.k, entry.p, entry.height, entry.radius =
-				"cyl", vec(op.cframe.Position), op.height, op.radius
-		else
-			local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = op.cframe:GetComponents()
-			entry.k, entry.p, entry.z = op.kind, vec(op.cframe.Position), vec(op.size)
-			entry.r = { r00, r01, r02, r10, r11, r12, r20, r21, r22 }
-		end
-		table.insert(terrainOps, entry)
-	end
-	local colors = {}
-	for material, color in TerrainPlan.MaterialColors do
-		colors[material.Name] =
-			{ math.floor(color.R * 255), math.floor(color.G * 255), math.floor(color.B * 255) }
-	end
-	local wc = TerrainPlan.WaterColor
-	scene.terrain = {
-		ops = terrainOps,
-		colors = colors,
-		waterColor = { math.floor(wc.R * 255), math.floor(wc.G * 255), math.floor(wc.B * 255) },
-		bounds = { -760, -760, 760, 760 },
-		step = 4,
-	}
+	Export.collect(stage, scene)
 	fs.writeFile(previewPath, serde.encode("json", scene))
-	print(
-		string.format(
-			"Wrote preview scene (%d parts, %d lights, %d terrain ops)",
-			#scene.parts,
-			#scene.lights,
-			#terrainOps
-		)
-	)
+	print(string.format("Wrote preview scene (%d parts, %d lights)", #scene.parts, #scene.lights))
 end

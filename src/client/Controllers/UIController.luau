@@ -8,7 +8,8 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Layout = require(Shared.Config.MapLayout)
+local GameConfig = require(Shared.Config.GameConfig)
+local Layout = require(Shared.Config.FarmLayout)
 local Format = require(Shared.Util.Format)
 
 local UI = script.Parent.Parent.UI
@@ -28,15 +29,19 @@ local dim: TextButton
 local toastHolder: Frame
 local panels: { [string]: any } = {}
 local current: string? = nil
-local energyLabel: TextLabel
-local rateLabel: TextLabel
-local sealLabel: TextLabel
-local wellLabel: TextLabel
-local wellSetter: (number) -> ()
-local wellHint: TextLabel
-local energyIconHolder: Frame
-local displayedEnergy = 0
+local cashLabel: TextLabel
+local incomeLabel: TextLabel
+local cashIcon: Frame
+local boxLabel: TextLabel
+local boxSetter: (number) -> ()
+local boxHint: TextLabel
+local boxCard: TextButton
+local carryCard: Frame
+local carryLabel: TextLabel
+local carryValue: TextLabel
+local displayedCash = 0
 local loading: Frame?
+local menuButtons: { [string]: GuiObject } = {}
 
 UIController.isTouch = false
 UIController.panelScale = 1
@@ -53,7 +58,7 @@ local function computeScales()
 	local base = math.min(size.X / 1180, size.Y / 660)
 	local hud = math.clamp(base * (if touch then 1.12 else 1), 0.62, 1.25)
 	hudScale.Scale = hud
-	UIController.panelScale = math.clamp(math.min(size.X * 0.95 / 820, (size.Y - 40) * 0.92 / 560), 0.45, 1.2)
+	UIController.panelScale = math.clamp(math.min(size.X * 0.95 / 860, (size.Y - 40) * 0.92 / 580), 0.45, 1.2)
 	for _, panel in panels do
 		panel.scale.Scale = UIController.panelScale
 	end
@@ -63,44 +68,46 @@ end
 
 local TONES = {
 	info = Theme.PanelLighter,
-	good = Color3.fromRGB(46, 110, 76),
-	bad = Color3.fromRGB(130, 40, 56),
-	rare = Color3.fromRGB(150, 96, 30),
+	good = Color3.fromRGB(46, 120, 76),
+	bad = Color3.fromRGB(150, 44, 56),
+	rare = Color3.fromRGB(160, 104, 30),
 	reward = Theme.VioletDark,
+	cash = Color3.fromRGB(40, 130, 60),
 }
 
 function UIController.toast(text: string, tone: string?, duration: number?)
 	local color = TONES[tone or "info"] or TONES.info
 	local frame = new("Frame", {
 		Size = UDim2.fromOffset(0, 40),
-		AutomaticSize = Enum.AutomaticSize.X,
+		AutomaticSize = Enum.AutomaticSize.XY,
 		BackgroundColor3 = color,
-		BackgroundTransparency = 0.08,
+		BackgroundTransparency = 0.06,
 		UIKit.corner(20),
-		UIKit.stroke(Color3.new(1, 1, 1), 1, 0.8),
-		UIKit.padding(0, 18),
+		UIKit.stroke(Color3.new(1, 1, 1), 1, 0.75),
+		UIKit.padding(9, 18),
+		new("UISizeConstraint", { MaxSize = Vector2.new(620, 200) }),
 		UIKit.text({
-			Size = UDim2.new(0, 0, 1, 0),
-			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.new(0, 0, 0, 22),
+			AutomaticSize = Enum.AutomaticSize.XY,
 			Text = text,
 			FontFace = Theme.BodyBold,
 			TextSize = 17,
-			TextWrapped = false,
+			TextWrapped = true,
+			TextXAlignment = Enum.TextXAlignment.Center,
 		}),
 		new("UIScale", { Scale = 0.6 }),
 	})
 	frame.Parent = toastHolder
 	local scale = frame:FindFirstChildOfClass("UIScale") :: UIScale
 	UIKit.tween(scale, 0.25, { Scale = 1 }, Enum.EasingStyle.Back)
-	local children = toastHolder:GetChildren()
 	local count = 0
-	for _, child in children do
+	for _, child in toastHolder:GetChildren() do
 		if child:IsA("Frame") then
 			count += 1
 		end
 	end
 	if count > 4 then
-		for _, child in children do
+		for _, child in toastHolder:GetChildren() do
 			if child:IsA("Frame") and child ~= frame then
 				child:Destroy()
 				break
@@ -178,104 +185,121 @@ function UIController.getGui(): ScreenGui
 	return gui
 end
 
+function UIController.menuButton(name: string): GuiObject?
+	return menuButtons[name]
+end
+
+-- Is the local character within `range` studs (flat) of `position`?
+function UIController.near(position: Vector3, range: number): boolean
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return false
+	end
+	local d = root.Position - position
+	return Vector3.new(d.X, 0, d.Z).Magnitude <= range
+end
+
+function UIController.goHome()
+	registry.SoundController.play("travel")
+	registry.StateController.request("GoHome")
+end
+
 -- HUD -------------------------------------------------------------------------------------
 
-local function statCard(parent: Instance, height: number, width: number, order: number): Frame
-	return new("Frame", {
+local function card(parent: Instance, height: number, width: number, order: number, class: string?): any
+	return new(class or "Frame", {
 		Parent = parent,
 		Size = UDim2.fromOffset(width, height),
 		BackgroundColor3 = Theme.Panel,
-		BackgroundTransparency = 0.12,
+		BackgroundTransparency = 0.1,
 		LayoutOrder = order,
 		UIKit.corner(14),
 		UIKit.stroke(Theme.StrokeSoft, 1.5, 0.1),
 	})
 end
 
-local function menuIcon(kind: string): Frame
-	local icon = new("Frame", { Size = UDim2.fromOffset(34, 34), BackgroundTransparency = 1 })
-	local white = Color3.fromRGB(240, 232, 255)
-	if kind == "Summon" then
-		new("Frame", {
-			Parent = icon,
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromScale(0.95, 0.95),
-			BackgroundTransparency = 1,
-			UIKit.round(),
-			UIKit.stroke(white, 2.5),
-		})
-		new("Frame", {
-			Parent = icon,
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromScale(0.36, 0.36),
-			Rotation = 45,
-			BackgroundColor3 = Theme.Violet,
-			UIKit.corner(2),
-		})
-	elseif kind == "Units" then
-		for i = 0, 3 do
-			new("Frame", {
-				Parent = icon,
-				Position = UDim2.fromScale((i % 2) * 0.55, math.floor(i / 2) * 0.55),
-				Size = UDim2.fromScale(0.45, 0.45),
-				BackgroundColor3 = if i == 0 then Theme.Violet else white,
-				UIKit.corner(4),
-			})
-		end
-	elseif kind == "Upgrades" then
+local MENU = {
+	{ name = "Sorcerers", panel = "Sorcerers", hotkey = "G", color = Theme.Violet },
+	{ name = "Crates", panel = "Crates", hotkey = "C", color = Theme.Gold },
+	{ name = "Crate Shop", panel = "CrateShop", hotkey = "B", color = Theme.Gold },
+	{ name = "Upgrade Shop", panel = "UpgradeShop", hotkey = "U", color = Theme.Cash },
+	{ name = "Home", action = "home", hotkey = "H", color = Theme.Red },
+	{ name = "Settings", panel = "Settings", color = Theme.StrokeSoft },
+}
+
+local function menuIcon(info: any): Frame
+	local name = info.name
+	if name == "Crates" or name == "Crate Shop" then
+		return UIKit.crateIcon(if name == "Crates" then "basic" else "rare", 36)
+	elseif name == "Sorcerers" then
+		return UIKit.orbIcon(34, Theme.Violet)
+	elseif name == "Upgrade Shop" then
+		local icon = new("Frame", { Size = UDim2.fromOffset(34, 34), BackgroundTransparency = 1 })
 		new("Frame", {
 			Parent = icon,
 			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.fromScale(0.5, 0.12),
-			Size = UDim2.fromScale(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.06),
+			Size = UDim2.fromScale(0.52, 0.52),
 			Rotation = 45,
-			BackgroundColor3 = white,
+			BackgroundColor3 = Theme.Cash,
 			UIKit.corner(3),
 		})
 		new("Frame", {
 			Parent = icon,
 			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.fromScale(0.5, 0.42),
-			Size = UDim2.fromScale(0.26, 0.52),
-			BackgroundColor3 = white,
+			Position = UDim2.fromScale(0.5, 0.4),
+			Size = UDim2.fromScale(0.26, 0.56),
+			BackgroundColor3 = Theme.Cash,
 			UIKit.corner(2),
 		})
-	elseif kind == "Travel" then
+		return icon
+	elseif name == "Home" then
+		local icon = new("Frame", { Size = UDim2.fromOffset(34, 34), BackgroundTransparency = 1 })
+		-- A tiny torii
 		new("Frame", {
 			Parent = icon,
-			Position = UDim2.fromScale(0, 0.08),
+			Position = UDim2.fromScale(0, 0.1),
 			Size = UDim2.fromScale(1, 0.14),
-			BackgroundColor3 = Theme.Seal,
+			BackgroundColor3 = Theme.Red,
 			UIKit.corner(2),
 		})
 		new("Frame", {
 			Parent = icon,
-			Position = UDim2.fromScale(0.08, 0.32),
-			Size = UDim2.fromScale(0.84, 0.1),
-			BackgroundColor3 = Theme.Seal,
+			Position = UDim2.fromScale(0.1, 0.34),
+			Size = UDim2.fromScale(0.8, 0.1),
+			BackgroundColor3 = Theme.Red,
 		})
 		for _, x in { 0.18, 0.7 } do
 			new("Frame", {
 				Parent = icon,
 				Position = UDim2.fromScale(x, 0.2),
 				Size = UDim2.fromScale(0.12, 0.8),
-				BackgroundColor3 = Theme.Seal,
+				BackgroundColor3 = Theme.Red,
 			})
 		end
-	else -- Settings
-		for i = 0, 2 do
-			new("Frame", {
-				Parent = icon,
-				Position = UDim2.fromScale(0.08, 0.16 + i * 0.3),
-				Size = UDim2.fromScale(0.84, 0.12),
-				BackgroundColor3 = white,
-				UIKit.round(),
-			})
-		end
+		return icon
+	end
+	local icon = new("Frame", { Size = UDim2.fromOffset(26, 26), BackgroundTransparency = 1 })
+	for i = 0, 2 do
+		new("Frame", {
+			Parent = icon,
+			Position = UDim2.fromScale(0.08, 0.16 + i * 0.3),
+			Size = UDim2.fromScale(0.84, 0.12),
+			BackgroundColor3 = Theme.Text,
+			UIKit.round(),
+		})
 	end
 	return icon
+end
+
+local function runMenu(info: any)
+	if info.action == "home" then
+		UIController.close(true)
+		UIController.goHome()
+	else
+		UIController.toggle(info.panel)
+	end
 end
 
 local function buildHud()
@@ -291,124 +315,127 @@ local function buildHud()
 	local stats = new("Frame", {
 		Parent = root,
 		Position = UDim2.fromOffset(14, 10),
-		Size = UDim2.fromOffset(270, 200),
+		Size = UDim2.fromOffset(290, 260),
 		BackgroundTransparency = 1,
 		UIKit.list(Enum.FillDirection.Vertical, 8),
 	})
-	local energyCard = statCard(stats, 62, 260, 1)
-	energyIconHolder = UIKit.energyIcon(44)
-	energyIconHolder.Position = UDim2.fromOffset(10, 9)
-	energyIconHolder.Parent = energyCard
-	energyLabel = UIKit.text({
-		Parent = energyCard,
-		Position = UDim2.fromOffset(62, 4),
-		Size = UDim2.new(1, -70, 0, 34),
-		Text = "0",
+	local cashCard = card(stats, 66, 280, 1)
+	cashCard.Name = "CashCard"
+	cashIcon = UIKit.cashIcon(46)
+	cashIcon.Position = UDim2.fromOffset(10, 10)
+	cashIcon.Parent = cashCard
+	cashLabel = UIKit.text({
+		Name = "Cash",
+		Parent = cashCard,
+		Position = UDim2.fromOffset(64, 4),
+		Size = UDim2.new(1, -72, 0, 36),
+		Text = "$0",
 		FontFace = Theme.Heavy,
 		TextSize = 30,
+		TextColor3 = Theme.Text,
 	})
-	rateLabel = UIKit.text({
-		Parent = energyCard,
-		Position = UDim2.fromOffset(62, 36),
-		Size = UDim2.new(1, -70, 0, 20),
-		Text = "+0/s",
-		TextColor3 = Theme.Violet,
+	incomeLabel = UIKit.text({
+		Name = "Income",
+		Parent = cashCard,
+		Position = UDim2.fromOffset(64, 38),
+		Size = UDim2.new(1, -72, 0, 22),
+		Text = "+$0/s",
+		TextColor3 = Theme.Cash,
 		FontFace = Theme.BodyBold,
 		TextSize = 15,
 	})
 
-	local sealCard = statCard(stats, 44, 150, 2)
-	local sealIcon = UIKit.sealIcon(30)
-	sealIcon.Position = UDim2.fromOffset(9, 7)
-	sealIcon.Parent = sealCard
-	sealLabel = UIKit.text({
-		Parent = sealCard,
-		Position = UDim2.fromOffset(48, 0),
-		Size = UDim2.new(1, -56, 1, 0),
-		Text = "0",
-		FontFace = Theme.Heavy,
-		TextSize = 22,
-	})
-
-	local wellCard = new("TextButton", {
-		Parent = stats,
-		Text = "",
-		AutoButtonColor = false,
-		Size = UDim2.fromOffset(260, 58),
-		BackgroundColor3 = Theme.Panel,
-		BackgroundTransparency = 0.12,
-		LayoutOrder = 3,
-		UIKit.corner(14),
-		UIKit.stroke(Theme.StrokeSoft, 1.5, 0.1),
-	})
+	boxCard = card(stats, 64, 280, 2, "TextButton")
+	boxCard.Name = "OrbBoxCard"
+	boxCard.Text = ""
+	boxCard.AutoButtonColor = false
+	local orb = UIKit.orbIcon(26)
+	orb.Position = UDim2.fromOffset(10, 6)
+	orb.Parent = boxCard
 	UIKit.text({
-		Parent = wellCard,
-		Position = UDim2.fromOffset(12, 4),
-		Size = UDim2.new(1, -24, 0, 20),
-		Text = "SPIRIT WELL",
+		Parent = boxCard,
+		Position = UDim2.fromOffset(42, 6),
+		Size = UDim2.new(1, -54, 0, 22),
+		Text = "ORB BOX",
 		FontFace = Theme.Heavy,
-		TextSize = 12,
+		TextSize = 14,
 		TextColor3 = Theme.TextDim,
 	})
-	wellLabel = UIKit.text({
-		Parent = wellCard,
-		Position = UDim2.fromOffset(12, 4),
-		Size = UDim2.new(1, -24, 0, 20),
+	boxLabel = UIKit.text({
+		Name = "Count",
+		Parent = boxCard,
+		Position = UDim2.fromOffset(42, 6),
+		Size = UDim2.new(1, -54, 0, 22),
 		Text = "0 / 0",
 		FontFace = Theme.BodyBold,
-		TextSize = 14,
+		TextSize = 15,
 		TextXAlignment = Enum.TextXAlignment.Right,
 	})
 	local bar, setter = UIKit.bar(UDim2.new(1, -24, 0, 10), Theme.Violet)
-	bar.Position = UDim2.fromOffset(12, 27)
-	bar.Parent = wellCard
-	wellSetter = setter
-	wellHint = UIKit.text({
-		Parent = wellCard,
-		Position = UDim2.fromOffset(12, 38),
+	bar.Position = UDim2.fromOffset(12, 32)
+	bar.Parent = boxCard
+	boxSetter = setter
+	boxHint = UIKit.text({
+		Name = "Hint",
+		Parent = boxCard,
+		Position = UDim2.fromOffset(12, 44),
 		Size = UDim2.new(1, -24, 0, 16),
-		Text = "Tap to travel home",
+		Text = "",
 		FontFace = Theme.Body,
 		TextSize = 12,
 		TextColor3 = Theme.TextFaint,
 	})
-	wellCard.Activated:Connect(function()
+	boxCard.Activated:Connect(function()
 		registry.SoundController.play("click")
-		local character = player.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		local profile = registry.StateController.profile
-		if root and profile and profile.plot then
-			local wellPos = (Layout.plotFloorCFrame(profile.plot) * CFrame.new(Layout.WellOffset)).Position
-			if (root.Position - wellPos).Magnitude < 44 then
-				registry.StateController.request("Collect")
-				return
-			end
+		local farm = registry.StateController.farm()
+		if farm and UIController.near(Layout.boxWorld(farm), GameConfig.CollectRange) then
+			registry.StateController.request("Collect")
+		else
+			UIController.goHome()
 		end
-		registry.WorldController.travel("Home")
 	end)
+
+	carryCard = card(stats, 56, 280, 3)
+	carryCard.Name = "CarryCard"
+	carryCard.Visible = false
+	carryCard.BackgroundColor3 = Theme.VioletDark
+	local carryIcon = UIKit.crateIcon("basic", 34)
+	carryIcon.Position = UDim2.fromOffset(10, 11)
+	carryIcon.Parent = carryCard
+	carryLabel = UIKit.text({
+		Parent = carryCard,
+		Position = UDim2.fromOffset(52, 4),
+		Size = UDim2.new(1, -60, 0, 24),
+		Text = "Carrying 0 Cursed Orbs",
+		FontFace = Theme.BodyBold,
+		TextSize = 15,
+	})
+	carryValue = UIKit.text({
+		Parent = carryCard,
+		Position = UDim2.fromOffset(52, 28),
+		Size = UDim2.new(1, -60, 0, 20),
+		Text = "Sell at the Sell Stand",
+		TextColor3 = Theme.Gold,
+		FontFace = Theme.Body,
+		TextSize = 13,
+	})
 
 	-- Menu buttons (right side)
 	local menu = new("Frame", {
 		Parent = root,
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -12, 0.46, 0),
-		Size = UDim2.fromOffset(84, 420),
+		Position = UDim2.new(1, -12, 0.48, 0),
+		Size = UDim2.fromOffset(90, 520),
 		BackgroundTransparency = 1,
 		UIKit.list(
 			Enum.FillDirection.Vertical,
-			10,
+			8,
 			Enum.HorizontalAlignment.Center,
 			Enum.VerticalAlignment.Center
 		),
 	})
-	local buttons: { any } = {
-		{ name = "Summon", panel = "Summon", hotkey = "F" },
-		{ name = "Units", panel = "Units", hotkey = "G" },
-		{ name = "Upgrades", panel = "Upgrades", hotkey = "U" },
-		{ name = "Travel", panel = "Travel", hotkey = "T" },
-		{ name = "Settings", panel = "Settings" },
-	}
-	for i, info in buttons do
+	for i, info in MENU do
+		local small = info.name == "Settings"
 		local scale = new("UIScale")
 		local button = new("TextButton", {
 			Parent = menu,
@@ -416,31 +443,30 @@ local function buildHud()
 			Text = "",
 			AutoButtonColor = false,
 			LayoutOrder = i,
-			Size = UDim2.fromOffset(
-				if info.name == "Settings" then 56 else 76,
-				if info.name == "Settings" then 56 else 76
-			),
+			Size = UDim2.fromOffset(if small then 56 else 82, if small then 56 else 70),
 			BackgroundColor3 = Theme.Panel,
 			BackgroundTransparency = 0.08,
-			UIKit.corner(18),
-			UIKit.stroke(if info.name == "Summon" then Theme.Violet else Theme.StrokeSoft, 2, 0.1),
+			UIKit.corner(16),
+			UIKit.stroke(info.color, 2, 0.15),
 			scale,
 		})
-		local icon = menuIcon(info.name)
+		menuButtons[info.name] = button
+		local icon = menuIcon(info)
 		icon.AnchorPoint = Vector2.new(0.5, 0)
-		icon.Position = UDim2.fromScale(0.5, 0.14)
-		icon.Size = if info.name == "Settings" then UDim2.fromOffset(26, 26) else UDim2.fromOffset(34, 34)
+		icon.Position = UDim2.fromScale(0.5, if small then 0.27 else 0.1)
 		icon.Parent = button
-		if info.name ~= "Settings" then
+		if not small then
 			UIKit.text({
 				Parent = button,
 				AnchorPoint = Vector2.new(0.5, 1),
-				Position = UDim2.new(0.5, 0, 1, -5),
-				Size = UDim2.new(1, 0, 0, 16),
+				Position = UDim2.new(0.5, 0, 1, -4),
+				Size = UDim2.new(1, -4, 0, 16),
 				Text = info.name,
 				FontFace = Theme.BodyBold,
-				TextSize = 13,
+				TextSize = 12,
 				TextXAlignment = Enum.TextXAlignment.Center,
+				TextWrapped = false,
+				TextScaled = false,
 			})
 		end
 		if info.hotkey then
@@ -465,24 +491,16 @@ local function buildHud()
 		button.Activated:Connect(function()
 			registry.SoundController.play("click")
 			UIKit.tween(scale, 0.18, { Scale = 1 }, Enum.EasingStyle.Back)
-			if info.panel == "Summon" then
-				registry.WorldController.openSummon()
-			else
-				UIController.toggle(info.panel)
-			end
+			runMenu(info)
 		end)
 	end
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed or UserInputService:GetFocusedTextBox() then
 			return
 		end
-		for _, info in buttons do
+		for _, info in MENU do
 			if info.hotkey and input.KeyCode == (Enum.KeyCode :: any)[info.hotkey] then
-				if info.panel == "Summon" then
-					registry.WorldController.openSummon()
-				else
-					UIController.toggle(info.panel)
-				end
+				runMenu(info)
 			end
 		end
 		if input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.ButtonB then
@@ -493,8 +511,8 @@ local function buildHud()
 	toastHolder = new("Frame", {
 		Parent = root,
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -150),
-		Size = UDim2.fromOffset(600, 220),
+		Position = UDim2.new(0.5, 0, 1, -140),
+		Size = UDim2.fromOffset(640, 240),
 		BackgroundTransparency = 1,
 		UIKit.list(
 			Enum.FillDirection.Vertical,
@@ -512,27 +530,41 @@ local function refreshNumbers()
 		return
 	end
 	-- Smoothly count toward the real balance
-	local target = profile.energy
-	if math.abs(target - displayedEnergy) < 1 then
-		displayedEnergy = target
+	local target = profile.cash
+	if math.abs(target - displayedCash) < 1 then
+		displayedCash = target
 	else
-		displayedEnergy += (target - displayedEnergy) * 0.18
+		displayedCash += (target - displayedCash) * 0.18
 	end
-	energyLabel.Text = Format.abbreviate(displayedEnergy)
-	rateLabel.Text = "+" .. Format.rate(state.rate())
-	sealLabel.Text = Format.commas(profile.seals)
-	local stored, cap = state.wellStored(), state.wellCapacity()
-	wellLabel.Text = Format.abbreviate(stored) .. " / " .. Format.abbreviate(cap)
-	wellSetter(if cap > 0 then stored / cap else 0)
-	local full = cap > 0 and stored >= cap
-	wellHint.Text = if full then "Full! Collect to keep earning" else "Tap: collect if near, else travel home"
-	wellHint.TextColor3 = if full then Theme.Gold else Theme.TextFaint
+	cashLabel.Text = Format.cash(displayedCash)
+	local ops, income = state.totals()
+	incomeLabel.Text = "+" .. Format.cash(income) .. "/s   " .. Format.abbreviate(ops) .. " Orbs per Second"
+	local orbs, value, cap = state.box()
+	boxLabel.Text = Format.commas(math.floor(orbs)) .. " / " .. Format.commas(cap)
+	boxSetter(if cap > 0 then orbs / cap else 0)
+	local full = cap > 0 and orbs >= cap
+	if full then
+		boxHint.Text = "FULL! Collect it to keep producing"
+		boxHint.TextColor3 = Theme.Gold
+	elseif ops <= 0 then
+		boxHint.Text = "Place a Sorcerer to make Cursed Orbs"
+		boxHint.TextColor3 = Theme.TextFaint
+	else
+		boxHint.Text = string.format("Worth %s  -  tap to Collect / go home", Format.cash(value))
+		boxHint.TextColor3 = Theme.TextFaint
+	end
+	local carried = profile.carried
+	carryCard.Visible = carried.orbs >= 1
+	if carried.orbs >= 1 then
+		carryLabel.Text = string.format("Carrying %s Cursed Orbs", Format.commas(carried.orbs))
+		carryValue.Text =
+			string.format("Sell at the Sell Stand for %s", Format.cash(math.floor(carried.value + 0.5)))
+	end
 end
 
-function UIController.pulseEnergy()
-	local scale = energyIconHolder:FindFirstChildOfClass("UIScale")
-		or new("UIScale", { Parent = energyIconHolder })
-	scale.Scale = 1.35
+function UIController.pulseCash()
+	local scale = cashIcon:FindFirstChildOfClass("UIScale") or new("UIScale", { Parent = cashIcon })
+	scale.Scale = 1.4
 	UIKit.tween(scale, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
 end
 
@@ -540,23 +572,24 @@ local function buildLoading()
 	loading = new("Frame", {
 		Parent = gui,
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Color3.fromRGB(12, 8, 18),
+		BackgroundColor3 = Color3.fromRGB(24, 18, 34),
 		ZIndex = 50,
 		UIKit.text({
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.46),
-			Size = UDim2.fromOffset(600, 60),
-			Text = "CURSEBOUND FARM",
+			Size = UDim2.fromOffset(600, 70),
+			Text = string.upper(GameConfig.GameName),
 			FontFace = Theme.TitleBold,
-			TextSize = 44,
+			TextSize = 56,
+			TextColor3 = Theme.Gold,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			ZIndex = 51,
 		}),
 		UIKit.text({
 			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.55),
+			Position = UDim2.fromScale(0.5, 0.56),
 			Size = UDim2.fromOffset(600, 30),
-			Text = "Preparing your sanctuary...",
+			Text = "Preparing Your Farm...",
 			TextColor3 = Theme.TextDim,
 			TextSize = 18,
 			TextXAlignment = Enum.TextXAlignment.Center,
@@ -588,7 +621,7 @@ function UIController.init(reg: any)
 		registry.SoundController.play("click")
 	end
 	gui = new("ScreenGui", {
-		Name = "CurseboundUI",
+		Name = "JJKFarmUI",
 		ResetOnSpawn = false,
 		IgnoreGuiInset = false,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
@@ -609,7 +642,7 @@ function UIController.init(reg: any)
 		Text = "",
 		AutoButtonColor = false,
 		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.45,
+		BackgroundTransparency = 0.5,
 		Visible = false,
 		Activated = function()
 			UIController.close()

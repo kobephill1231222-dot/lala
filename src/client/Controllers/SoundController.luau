@@ -111,7 +111,7 @@ function SoundController.setEnabled(sfx: boolean, music: boolean)
 end
 
 local function attachAmbient()
-	local map = workspace:WaitForChild("CurseboundMap", 30)
+	local map = workspace:WaitForChild("JJKFarmMap", 30)
 	if not map then
 		return
 	end
@@ -136,7 +136,7 @@ end
 
 function SoundController.init(_registry: any)
 	folder = Instance.new("Folder")
-	folder.Name = "CurseboundSfx"
+	folder.Name = "JJKFarmSfx"
 	folder.Parent = SoundService
 end
 

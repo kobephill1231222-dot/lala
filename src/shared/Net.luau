@@ -12,7 +12,6 @@ local DEFINITIONS = {
 	State = "RemoteEvent", -- server -> owner: profile snapshot
 	Notify = "RemoteEvent", -- server -> client: (kind, payload) toasts, rewards
 	Effect = "RemoteEvent", -- server -> clients: (name, payload) world effects
-	Ability = "RemoteEvent", -- client -> server: (abilityId, aimDirection)
 }
 
 export type Remotes = {
@@ -20,7 +19,6 @@ export type Remotes = {
 	State: RemoteEvent,
 	Notify: RemoteEvent,
 	Effect: RemoteEvent,
-	Ability: RemoteEvent,
 }
 
 function Net.createServer(): Remotes

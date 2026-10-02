@@ -1,6 +1,6 @@
-// Offline preview of Cursebound Farm geometry exported by tools/lune (bake / models).
-// Approximates Roblox's dusk lighting, atmosphere, neon bloom and smooth terrain so the
-// map's composition can be judged without Roblox Studio. Not used by the game itself.
+// Offline preview of JJK Farm geometry exported by tools/lune (bake / models).
+// Approximates Roblox's afternoon lighting, atmosphere and neon bloom so the map's
+// composition and scale can be judged without Roblox Studio. Not used by the game itself.
 import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
@@ -233,12 +233,12 @@ async function main() {
   data.parts = asList(data.parts); data.lights = asList(data.lights);
   if (data.terrain) data.terrain.ops = asList(data.terrain.ops);
   const L = data.lighting || {};
-  scene.background = skyTexture(L.skyTop || "#1d1630", L.skyMid || "#5a3a6e", L.skyHorizon || "#d9825a");
-  const baseFog = Number(params.get("fog") || L.fogDensity || 0.0024);
-  scene.fog = new THREE.FogExp2(new THREE.Color(L.fog || "#5d4870"), baseFog);
-  scene.add(new THREE.HemisphereLight(new THREE.Color(L.hemiSky || "#8c7ab8"), new THREE.Color(L.hemiGround || "#3a3040"), L.hemi || 1.5));
-  const sun = new THREE.DirectionalLight(new THREE.Color(L.sun || "#ffb27a"), L.sunIntensity || 1.6);
-  const sd = L.sunDir || [-0.75, 0.32, 0.25];
+  scene.background = skyTexture(L.skyTop || "#4f8fdc", L.skyMid || "#9cc6f0", L.skyHorizon || "#e4eef6");
+  const baseFog = Number(params.get("fog") || L.fogDensity || 0.0011);
+  scene.fog = new THREE.FogExp2(new THREE.Color(L.fog || "#c9dcef"), baseFog);
+  scene.add(new THREE.HemisphereLight(new THREE.Color(L.hemiSky || "#e4ecff"), new THREE.Color(L.hemiGround || "#8a7f68"), L.hemi || 1.25));
+  const sun = new THREE.DirectionalLight(new THREE.Color(L.sun || "#fff1da"), L.sunIntensity || 2.6);
+  const sd = L.sunDir || [-0.45, 0.82, 0.36];
   sun.position.set(sd[0] * 600, sd[1] * 600, sd[2] * 600);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   const sc = sun.shadow.camera; sc.left = -380; sc.right = 380; sc.top = 380; sc.bottom = -380; sc.near = 10; sc.far = 1600;
@@ -249,7 +249,7 @@ async function main() {
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.55, 0.5, 0.82));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.4, 0.45, 0.9));
   composer.addPass(new OutputPass());
 
   const lights = (data.lights || []).map((l) => ({ ...l, obj: null }));
@@ -267,7 +267,7 @@ async function main() {
     pool.forEach((pl, i) => {
       const l = lights[i];
       if (!l) { pl.intensity = 0; return; }
-      pl.position.set(...l.p); pl.color = rbxColor(l.c); pl.distance = l.range * 1.6; pl.intensity = l.b * 22; pl.decay = 1.6;
+      pl.position.set(...l.p); pl.color = rbxColor(l.c); pl.distance = l.range * 1.4; pl.intensity = l.b * 8; pl.decay = 1.6;
     });
     composer.render();
     return true;
