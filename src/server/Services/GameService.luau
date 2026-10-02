@@ -24,7 +24,8 @@ local requestLimiter = RateLimiter.new(8, 16)
 local summonLimiter = RateLimiter.new(1.2, 3)
 local rng = Random.new()
 
-local COLLECT_RANGE = 18
+-- Anywhere inside your own sanctuary counts (the well also collects on touch).
+local COLLECT_RANGE = 45
 
 local function now(): number
 	return workspace:GetServerTimeNow()

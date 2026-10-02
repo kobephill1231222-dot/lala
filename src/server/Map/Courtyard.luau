@@ -103,15 +103,22 @@ local function buildCircle(parent: Instance, rng: any)
 	) :: BasePart
 	sigil.PrimaryPart = root
 	local r = Layout.CircleRadius - 3.4
-	for _, offset in { 0, 60 } do
+	-- Eight-pointed sigil: two overlapping squares plus radial spokes.
+	for _, offset in { 0, 45 } do
 		local pts = {}
-		for k = 0, 2 do
-			local a = rad(offset + k * 120)
+		for k = 0, 3 do
+			local a = rad(offset + k * 90)
 			table.insert(pts, V3(c.X + math.sin(a) * r, y + 0.14, c.Z - math.cos(a) * r))
 		end
-		for k = 1, 3 do
-			addSegment(sigil, root, pts[k], pts[k % 3 + 1], 0.32, Palette.Violet)
+		for k = 1, 4 do
+			addSegment(sigil, root, pts[k], pts[k % 4 + 1], 0.32, Palette.Violet)
 		end
+	end
+	for k = 0, 7 do
+		local a = rad(k * 45 + 22.5)
+		local inner = V3(c.X + math.sin(a) * 5, y + 0.14, c.Z - math.cos(a) * 5)
+		local outer = V3(c.X + math.sin(a) * (r - 0.6), y + 0.14, c.Z - math.cos(a) * (r - 0.6))
+		addSegment(sigil, root, inner, outer, 0.16, Palette.VioletLight)
 	end
 	for k = 0, 11 do
 		local a = rad(k * 30 + 15)
@@ -478,7 +485,11 @@ function Courtyard.build(map: Instance)
 		end
 	end
 	for _, corner in { V3(-30, 0, -30), V3(30, 0, -30), V3(-30, 0, 30), V3(30, 0, 30) } do
-		Kit.stoneLantern(folder, CFrame.new(V3(center.X, FLOOR_TOP, center.Z) + corner), 1, true)
+		local box = Kit.stoneLantern(folder, CFrame.new(V3(center.X, FLOOR_TOP, center.Z) + corner), 1, true)
+		local light = box:FindFirstChildOfClass("PointLight")
+		if light and corner.Z > 0 then
+			light:Destroy() -- keep the light budget mobile-friendly; the firebox still glows
+		end
 	end
 end
 

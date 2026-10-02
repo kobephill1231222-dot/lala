@@ -501,7 +501,11 @@ local function buildTerraceDressing(parent: Instance, rng: any)
 	for i = 0, 7 do
 		local a = rad(i * 45 + 22.5)
 		local p = V3(math.sin(a) * 38, y, -math.cos(a) * 38)
-		Kit.stoneLantern(folder, CFrame.lookAt(p, V3(0, y, 0)), 1.15, true)
+		local box = Kit.stoneLantern(folder, CFrame.lookAt(p, V3(0, y, 0)), 1.15, true)
+		local light = box:FindFirstChildOfClass("PointLight")
+		if light and i % 2 == 1 then
+			light:Destroy()
+		end
 	end
 	-- Small sub-shrines east and west
 	for _, x in { -31, 31 } do
@@ -586,7 +590,12 @@ local function buildApproach(parent: Instance, rng: any)
 	-- Lantern rows
 	for z = 70, 140, 14 do
 		for _, x in { -9.5, 9.5 } do
-			Kit.stoneLantern(folder, CFrame.lookAt(V3(x, 0, z), V3(0, 0, z)), 1, z % 28 == 0 or z < 100)
+			local box = Kit.stoneLantern(folder, CFrame.lookAt(V3(x, 0, z), V3(0, 0, z)), 1, true)
+			-- Alternate sides so the path is evenly lit with half the point lights.
+			local light = box:FindFirstChildOfClass("PointLight")
+			if light and ((z / 14) % 2 == 0) == (x > 0) then
+				light:Destroy()
+			end
 		end
 	end
 	-- Purification pavilion (chōzuya) beside the path
@@ -667,7 +676,7 @@ local function buildPlaza(parent: Instance, rng: any)
 					folder,
 					CFrame.new(c.X + math.sin(a) * (r - 2.5), y, c.Z - math.cos(a) * (r - 2.5)),
 					0.9,
-					true
+					i % 8 == 0
 				)
 			end
 		end

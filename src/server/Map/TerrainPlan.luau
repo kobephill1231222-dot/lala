@@ -26,7 +26,7 @@ local V3 = Vector3.new
 
 TerrainPlan.MaterialColors = {
 	[M.Grass] = Color3.fromRGB(66, 80, 50),
-	[M.LeafyGrass] = Color3.fromRGB(52, 46, 60),
+	[M.LeafyGrass] = Color3.fromRGB(64, 58, 76),
 	[M.Ground] = Color3.fromRGB(86, 72, 60),
 	[M.Cobblestone] = Color3.fromRGB(100, 96, 100),
 	[M.Rock] = Color3.fromRGB(88, 86, 96),

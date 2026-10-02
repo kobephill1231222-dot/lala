@@ -88,7 +88,7 @@ local function scenario()
 
 	print("Tutorial step 1: collect")
 	local far = request(alice, "Collect")
-	check("collect refused when far from well", far.ok == false)
+	check("collect refused when far from well", far.ok == false, far.message)
 	local wellPos = (Layout.plotFloorCFrame(1) * CF.new(Layout.WellOffset)).Position
 	teleport(alice, wellPos + V3(0, 3, 4))
 	local collected = request(alice, "Collect")

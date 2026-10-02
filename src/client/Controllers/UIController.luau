@@ -379,7 +379,7 @@ local function buildHud()
 		local profile = registry.StateController.profile
 		if root and profile and profile.plot then
 			local wellPos = (Layout.plotFloorCFrame(profile.plot) * CFrame.new(Layout.WellOffset)).Position
-			if (root.Position - wellPos).Magnitude < 40 then
+			if (root.Position - wellPos).Magnitude < 44 then
 				registry.StateController.request("Collect")
 				return
 			end

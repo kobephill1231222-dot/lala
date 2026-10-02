@@ -196,21 +196,6 @@ function SummonPanel.create(registry: any)
 			then "seal"
 			elseif banner.id == "greater" then "primary"
 			else "gold"
-		local one = UIKit.button({
-			parent = card,
-			text = "Summon x1",
-			style = style,
-			size = UDim2.new(1, -28, 0, 40),
-			position = UDim2.fromOffset(14, 330),
-		})
-		local three = UIKit.button({
-			parent = card,
-			text = "x3",
-			style = "secondary",
-			size = UDim2.new(1, -28, 0, 30),
-			position = UDim2.fromOffset(14, 374),
-			textSize = 15,
-		})
 		local function perform(count: number)
 			if not atCourtyard() then
 				registry.UIController.toast("Head to the Summoning Courtyard to perform rituals.", "bad")
@@ -220,18 +205,31 @@ function SummonPanel.create(registry: any)
 			local result = state.request("Summon", { banner = banner.id, count = count })
 			if result.ok then
 				ui.close(true)
-				registry.RevealController.play(result.data, function()
-					SummonPanel.lastBanner = banner.id
-					SummonPanel.lastCount = count
-				end)
+				registry.RevealController.play(result.data)
 			end
 		end
-		one.Activated:Connect(function()
-			perform(1)
-		end)
-		three.Activated:Connect(function()
-			perform(3)
-		end)
+		-- onClick (not a raw Activated connection) so disabled buttons stay inert.
+		local one = UIKit.button({
+			parent = card,
+			text = "Summon x1",
+			style = style,
+			size = UDim2.new(1, -28, 0, 40),
+			position = UDim2.fromOffset(14, 330),
+			onClick = function()
+				perform(1)
+			end,
+		})
+		local three = UIKit.button({
+			parent = card,
+			text = "x3",
+			style = "secondary",
+			size = UDim2.new(1, -28, 0, 30),
+			position = UDim2.fromOffset(14, 374),
+			textSize = 15,
+			onClick = function()
+				perform(3)
+			end,
+		})
 		cards[banner.id] = { one = one, three = three, odds = oddsLabels, banner = banner }
 	end
 

@@ -333,7 +333,7 @@ local function buildHouse(model: Model, floor: CFrame, rng: any)
 		Palette.LanternPaper,
 		M.Neon
 	)
-	Kit.light(flame, Palette.LanternLight, 10, 0.9)
+	local _ = flame -- the shrine candle glows without a point light (mobile light budget)
 	Kit.steps(
 		house,
 		cf * CFrame.new(0, 0, -4.5 - 2 * 1.1) * CFrame.Angles(0, rad(180), 0),
@@ -361,6 +361,43 @@ local function buildHouse(model: Model, floor: CFrame, rng: any)
 	end
 end
 
+local function buildGarden(model: Model, floor: CFrame, rng: any)
+	-- Stepping stones from the gate to the well
+	for k = 0, 6 do
+		local z = -32 + k * 3.6
+		local x = if k % 2 == 0 then -0.6 else 0.6
+		Kit.part(
+			model,
+			"SteppingStone",
+			V3(rng:NextNumber(2.6, 3.2), 0.25, rng:NextNumber(2, 2.4)),
+			floor * CFrame.new(x, 0.1, z) * CFrame.Angles(0, rad(rng:NextNumber(-20, 20)), 0),
+			Palette.StoneLight:Lerp(Palette.Stone, rng:NextNumber(0, 0.5)),
+			M.Slate
+		)
+	end
+	-- Low lanterns flanking the approach to the well (glow only, to save lights)
+	for _, x in { -4.5, 4.5 } do
+		local box = Kit.stoneLantern(model, floor * CFrame.new(x, 0, -14), 0.6, true)
+		local light = box:FindFirstChildOfClass("PointLight")
+		if light then
+			light:Destroy()
+		end
+	end
+	-- Moss and stones tucked around the outer training ring
+	for k = 1, 6 do
+		local a = rad(k * 60 + 30)
+		local p = (floor * CFrame.new(Layout.WellOffset + V3(math.sin(a) * 29, 0, -math.cos(a) * 29))).Position
+		Kit.rock(
+			model,
+			p,
+			rng:NextNumber(1.4, 2.4),
+			rng,
+			Palette.StoneDark:Lerp(Palette.Moss, rng:NextNumber(0.2, 0.6))
+		)
+		Kit.grassTufts(model, p + V3(1.5, 0, 0), 1.6, 3, rng)
+	end
+end
+
 function Sanctuary.build(parent: Instance, index: number): Model
 	local rng = Prng.new(5000 + index)
 	local model = PartKit.model(parent, "Sanctuary" .. index)
@@ -372,6 +409,7 @@ function Sanctuary.build(parent: Instance, index: number): Model
 	buildWell(model, floor, rng)
 	buildSpots(model, floor)
 	buildHouse(model, floor, rng)
+	buildGarden(model, floor, rng)
 	PartKit.folder(model, "Units")
 	return model
 end

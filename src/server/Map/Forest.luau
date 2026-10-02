@@ -342,19 +342,18 @@ local function buildInterior(parent: Instance, rng: any)
 		})
 	end
 	-- A few hanging violet will-o'-wisps for light and navigation
-	for k, c in clearings do
+	for _, c in clearings do
 		local wisp = Kit.ball(
 			folder,
 			"Wisp",
-			1.2,
-			CFrame.new(c + V3(4, 9, 0)),
+			1.4,
+			CFrame.new(c + V3(4, 11, 0)),
 			Palette.VioletLight,
 			M.Neon,
 			{ CanCollide = false, CanQuery = false, CastShadow = false }
 		)
-		if k % 2 == 1 then
-			Kit.light(wisp, Palette.Violet, 30, 1.2)
-		end
+		-- Every clearing is lit so fights stay readable.
+		Kit.light(wisp, Color3.fromRGB(190, 150, 255), 42, 1.1)
 	end
 	return clearings
 end
