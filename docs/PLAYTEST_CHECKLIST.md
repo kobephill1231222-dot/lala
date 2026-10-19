@@ -18,6 +18,18 @@ for the multiplayer items).
 - [ ] **Place** on the card: glowing rings appear on free slots, slot 1 is preselected with a
       translucent Kai. Clicking a ring (or **Place**) puts him there with a violet pillar.
 
+## Camera and avatar (top-down, R6)
+
+- [ ] The camera looks down on you from high above and never rotates. Your Farm is upright:
+      slots and the lane run up the screen, the gate and the plaza are below.
+- [ ] **W** walks up the screen, **S** down, **A** left, **D** right (thumbstick the same on
+      touch). Shift-lock and right-drag do nothing.
+- [ ] Mouse wheel, **I** / **O** and pinch zoom in and out within a sensible range.
+- [ ] Standing under Your Farm's gate, the Sell Stand roof, a shop roof or a tree, it fades.
+      Walking out brings it back. Sorcerers, Crates and the Orb Box never fade.
+- [ ] Your avatar is R6 (blocky, 6 body parts). If it isn't on a published place, set **Game
+      Settings > Avatar** to R6.
+
 ## Production
 
 - [ ] Kai punches forward about once a second, a shockwave ring pops, and an orange orb

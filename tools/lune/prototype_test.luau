@@ -38,7 +38,15 @@ local function instanceSignal(inst, key)
 	signals[id][key] = signals[id][key] or Signal.new(key)
 	return signals[id][key]
 end
-for _, pair in { { "ProximityPrompt", "Triggered" }, { "RemoteEvent", "OnClientEvent" } } do
+for _, pair in
+	{
+		{ "ProximityPrompt", "Triggered" },
+		{ "RemoteEvent", "OnClientEvent" },
+		{ "UserInputService", "InputBegan" },
+		{ "UserInputService", "InputChanged" },
+		{ "UserInputService", "TouchPinch" },
+	}
+do
 	roblox.implementProperty(pair[1], pair[2], function(inst)
 		return instanceSignal(inst, pair[2])
 	end)
@@ -47,6 +55,15 @@ roblox.implementMethod("Instance", "GetAttributeChangedSignal", function(inst, a
 	return instanceSignal(inst, "attr_" .. attr)
 end)
 roblox.implementMethod("Debris", "AddItem", function() end)
+roblox.implementMethod("UserInputService", "GetFocusedTextBox", function()
+	return nil
+end)
+roblox.implementMethod("RunService", "BindToRenderStep", function(rs, _name, _priority, fn)
+	rs.RenderStepped:Connect(fn)
+end)
+roblox.implementMethod("DataModel", "IsLoaded", function()
+	return true
+end)
 local soundsPlayed = {}
 roblox.implementMethod("Sound", "Play", function(sound)
 	table.insert(soundsPlayed, { name = sound.Name, parent = sound.Parent and sound.Parent.Name })
@@ -239,6 +256,10 @@ do
 	local notify = roblox.Instance.new("RemoteEvent")
 	notify.Name = "PrototypeNotify"
 	notify.Parent = game:GetService("ReplicatedStorage")
+	local camera = roblox.Instance.new("Camera")
+	camera.Parent = game:GetService("Workspace")
+	game:GetService("Workspace").CurrentCamera = camera
+	local character = EngineShim.spawnCharacter(game, player, roblox.Vector3.new(0, 3, 17))
 
 	local sb = Sandbox.new(game, { Random = EngineShim.Random() })
 	local HitSchedule = sb.requirePath("ReplicatedStorage/Prototype/HitSchedule")
@@ -285,8 +306,41 @@ do
 			expect(playerGui:FindFirstChild("PrototypeHud") ~= nil).toBeTruthy()
 		end)
 
+		it("looks down from above, north up, and fades the dojo roof when you walk in", function()
+			local TopDownCamera = sb.requirePath("ReplicatedStorage/Shared/Visuals/TopDownCamera")
+			for _ = 1, 60 do
+				runService.RenderStepped:FireSync(1 / 30)
+			end
+			expect(camera.CameraType).toBe(roblox.Enum.CameraType.Scriptable)
+			local cf = camera.CFrame
+			expect(cf.Position.Y > 60).toBeTruthy()
+			expect(cf.UpVector.Z < -0.9).toBeTruthy() -- north (-Z) is screen-up
+			-- The training post, dummy and chest are never faded.
+			for _, list in TopDownCamera.state.overhead.cells do
+				for _, part in list do
+					for _, name in { "Post", "Dummy", "Chest" } do
+						assert(part:FindFirstAncestor(name) == nil, part:GetFullName() .. " would fade")
+					end
+				end
+			end
+			character.HumanoidRootPart.CFrame = roblox.CFrame.new(0, 3.5, -18)
+			for _ = 1, 10 do
+				runService.RenderStepped:FireSync(1 / 30)
+			end
+			local faded = 0
+			for part in TopDownCamera.state.faded do
+				faded += 1
+				assert(part:FindFirstAncestor("Dojo"), part:GetFullName() .. " faded outside the dojo")
+			end
+			expect(faded > 0).toBeTruthy()
+			character.HumanoidRootPart.CFrame = roblox.CFrame.new(0, 3, 17)
+			for _ = 1, 10 do
+				runService.RenderStepped:FireSync(1 / 30)
+			end
+		end)
+
 		local rig = postModel.Sorcerer
-		local shoulder = rig.RightUpperArm.RightShoulder
+		local shoulder = rig.Torso["Right Shoulder"]
 		local rest = nil
 		it("stands in stance before the first wind-up", function()
 			runUntil(T0 + 1.2)

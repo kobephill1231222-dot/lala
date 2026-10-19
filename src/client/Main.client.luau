@@ -15,6 +15,7 @@ local registry: { [string]: any } = {
 
 local order = {
 	"StateController",
+	"CameraController",
 	"SoundController",
 	"UIController",
 	"EffectsController",

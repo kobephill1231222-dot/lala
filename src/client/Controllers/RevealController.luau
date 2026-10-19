@@ -69,7 +69,7 @@ function RevealController.playWorld(payload: any, mine: boolean)
 	end
 	local base = Layout.padWorld(farm, pad) * CFrame.new(0, 0.6, 0)
 	local camera = workspace.CurrentCamera
-	if not mine and camera and (camera.CFrame.Position - base.Position).Magnitude > 180 then
+	if not mine and camera and (camera.Focus.Position - base.Position).Magnitude > 180 then
 		return
 	end
 	local tier = payload.tier or "basic"

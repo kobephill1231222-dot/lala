@@ -43,11 +43,14 @@ if [[ "${PREVIEW:-0}" == "1" ]]; then
 	node tools/preview/render.mjs build/scene.json tools/preview/views.json build/preview
 	lune run tools/lune/models.luau build/game.rbxl build/models.json
 	node tools/preview/render.mjs build/models.json tools/preview/model_views.json build/preview
+	node tools/preview/render.mjs build/scene.json tools/preview/topdown_views.json build/preview
 	node tools/preview/render.mjs build/prototype_scene.json tools/preview/prototype_views.json build/preview
+	node tools/preview/render.mjs build/prototype_scene.json tools/preview/prototype_topdown_views.json build/preview
 	lune run tools/lune/prototype_frames.luau dist/Prototype.rbxl build/strike 20
 	for scene in build/strike/*.json; do
 		[[ "$scene" == */frames.json ]] && continue
 		node tools/preview/render.mjs "$scene" tools/preview/strike_view.json "build/strike_png/$(basename "$scene" .json)" 960 540
+		node tools/preview/render.mjs "$scene" tools/preview/strike_topdown_view.json "build/strike_td/$(basename "$scene" .json)" 960 540
 	done
 fi
 echo "Done: dist/JJKFarm.rbxl and dist/Prototype.rbxl"

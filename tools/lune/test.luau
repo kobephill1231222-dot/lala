@@ -10,6 +10,7 @@ local game = Sandbox.loadPlace(placePath)
 local specs = {
 	require("../../tests/rules.spec"),
 	require("../../tests/data.spec"),
+	require("../../tests/camera.spec"),
 }
 
 for _, spec in specs do

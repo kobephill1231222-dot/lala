@@ -6,12 +6,21 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local TopDownCamera =
+	require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Visuals"):WaitForChild("TopDownCamera"))
 local ChestView = require(script.Parent:WaitForChild("ChestView"))
 local Fx = require(script.Parent:WaitForChild("Fx"))
 local Hud = require(script.Parent:WaitForChild("Hud"))
 local TrainingView = require(script.Parent:WaitForChild("TrainingView"))
 
 local yard = workspace:WaitForChild("TrainingCourtyard")
+-- Top-down, north up: you arrive from the south with the post ahead of you. The Sorcerer,
+-- dummy and chest never fade (Kai's hair is tall enough to count as overhead).
+TopDownCamera.start({ yard }, function(part: BasePart): boolean
+	return part:FindFirstAncestor("Post") ~= nil
+		or part:FindFirstAncestor("Dummy") ~= nil
+		or part:FindFirstAncestor("Chest") ~= nil
+end)
 Hud.start(yard)
 TrainingView.start(yard)
 ChestView.start(yard)

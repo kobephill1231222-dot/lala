@@ -157,28 +157,45 @@ return function(ctx)
 			return Rig.solve(model)
 		end
 
-		it("builds every R15 joint", function()
-			local names = {}
-			for _, def in Rig.Joints do
-				assert(joints[def.name], "missing joint " .. def.name)
-				names[def.name] = true
-			end
+		local S = Rig.PostScale
+		-- Bottom of the right arm (the palm) and of each leg (the sole).
+		local function palm(cf)
+			return (cf["Right Arm"] * CFrame.new(0, -S, 0)).Position
+		end
+		local function sole(cf, leg)
+			return (cf[leg .. " Leg"] * CFrame.new(0, -S, 0)).Position
+		end
+
+		it("is a standard R6 rig", function()
 			for _, n in
-				{
-					"Root",
-					"Waist",
-					"Neck",
-					"RightShoulder",
-					"LeftElbow",
-					"RightWrist",
-					"LeftHip",
-					"RightKnee",
-					"LeftAnkle",
-				}
+				{ "HumanoidRootPart", "Torso", "Head", "Right Arm", "Left Arm", "Right Leg", "Left Leg" }
 			do
-				assert(names[n], n)
+				assert(model:FindFirstChild(n), "missing part " .. n)
 			end
+			for _, n in { "RootJoint", "Neck", "Right Shoulder", "Left Shoulder", "Right Hip", "Left Hip" } do
+				assert(joints[n], "missing joint " .. n)
+			end
+			expect(model.HumanoidRootPart.RootJoint.Part1.Name).toBe("Torso")
+			expect((model.Torso["Right Shoulder"].C0.Position - Vector3.new(1, 0.5, 0) * S).Magnitude).toBeLessThan(
+				1e-4
+			)
+			expect(model:FindFirstChildOfClass("Humanoid").RigType).toBe(sb.globals.Enum.HumanoidRigType.R6)
 			expect(model.PrimaryPart.Name).toBe("HumanoidRootPart")
+			-- At rest every part sits where an R6 character's does.
+			Rig.apply(joints, {})
+			local cf = Rig.solve(model)
+			expect((cf.Head.Position - Vector3.new(0, 4.5, 0) * S).Magnitude).toBeLessThan(1e-4)
+			expect((cf["Left Leg"].Position - Vector3.new(-0.5, 1, 0) * S).Magnitude).toBeLessThan(1e-4)
+			expect((cf["Right Arm"].Position - Vector3.new(1.5, 3, 0) * S).Magnitude).toBeLessThan(1e-4)
+		end)
+
+		it("poses in body space whatever the R6 joint frames are", function()
+			-- Swinging the right shoulder +90 about X points the arm straight ahead (-Z).
+			Rig.apply(joints, { ["Right Shoulder"] = CFrame.Angles(math.rad(90), 0, 0) })
+			local cf = Rig.solve(model)
+			local arm = cf["Right Arm"]
+			expect(arm.UpVector:Dot(Vector3.new(0, 0, 1))).toBeNear(1, 1e-4)
+			expect(palm(cf).Z < -1.5 * S).toBeTruthy()
 		end)
 
 		it("fits one strike inside the shortest beat", function()
@@ -201,11 +218,11 @@ return function(ctx)
 
 		it("reaches furthest exactly at contact, into the dummy's target", function()
 			local forward = function(u)
-				return -at(u).RightHand.Position.Z
+				return -palm(at(u)).Z
 			end
 			local reach = forward(0)
 			for _, u in { -0.4, -0.3, -0.2, -0.1, -0.05, -0.02, 0.15, 0.3, 0.5 } do
-				assert(forward(u) < reach, string.format("hand further at %.2f than at contact", u))
+				assert(forward(u) < reach, string.format("palm further at %.2f than at contact", u))
 			end
 			-- In the courtyard, the palm meets the dummy's hit point at contact.
 			local yard = game:GetService("Workspace"):FindFirstChild("TrainingCourtyard")
@@ -213,37 +230,39 @@ return function(ctx)
 				local Courtyard = sb.requirePath("ServerScriptService/Prototype/Courtyard")
 				local body = yard.Dummy.Body
 				local hitWorld = (body.CFrame * body.HitPoint.CFrame).Position
-				local palmLocal = at(0).RightHand.Position
-				local palmWorld = Courtyard.SorcererCFrame * palmLocal
+				local palmWorld = Courtyard.SorcererCFrame * palm(at(0))
 				expect((palmWorld - hitWorld).Magnitude).toBeLessThan(0.7)
 			end
 		end)
 
-		it("keeps both feet on the ground through the whole strike", function()
-			local rest = at(nil)
-			local floorY = rest.LeftFoot.Position.Y
+		it("keeps both soles on the ground and the feet apart through the whole strike", function()
 			local u = -tech.anticipation
+			local last = nil
 			while u <= tech.recovery do
 				local cf = at(u)
-				for _, foot in { "LeftFoot", "RightFoot" } do
-					local p = cf[foot]
-					assert(
-						math.abs(p.Position.Y - floorY) < 0.03,
-						string.format("%s off the floor at %.2f", foot, u)
-					)
-					-- Sole stays level
-					assert(p.UpVector.Y > 0.995, string.format("%s tilted at %.2f", foot, u))
+				local l, r = sole(cf, "Left"), sole(cf, "Right")
+				for side, p in { Left = l, Right = r } do
+					assert(math.abs(p.Y) < 0.03, string.format("%s sole off the floor at %.2f", side, u))
 				end
-				u += 0.02
+				-- Lead foot stays in front, back foot behind: the legs never cross.
+				assert(l.Z < r.Z - 1, string.format("feet crossed at %.2f", u))
+				-- No foot jumps between frames (60 fps), even in the snap into contact.
+				if last then
+					assert(
+						(l - last[1]).Magnitude < 0.5 and (r - last[2]).Magnitude < 0.5,
+						"foot jumped at " .. u
+					)
+				end
+				last = { l, r }
+				u += 1 / 60
 			end
 			local resting = at("rest")
-			expect(math.abs(resting.RightFoot.Position.Y - floorY)).toBeLessThan(0.03)
+			expect(math.abs(sole(resting, "Right").Y)).toBeLessThan(0.03)
 		end)
 
-		it("plants the back foot while the body lunges", function()
-			local before, during = at(-0.3).RightFoot.Position, at(0).RightFoot.Position
-			expect((before - during).Magnitude).toBeLessThan(0.03)
-			expect(at(0).LowerTorso.Position.Z).toBeLessThan(at(-0.3).LowerTorso.Position.Z - 0.5)
+		it("lunges the body forward into contact", function()
+			expect(at(0).Torso.Position.Z).toBeLessThan(at(-0.2).Torso.Position.Z - 0.5)
+			expect(at(0).Torso.Position.Y).toBeLessThan(at(-0.42).Torso.Position.Y - 0.3)
 		end)
 
 		it("blends into the resting pose", function()

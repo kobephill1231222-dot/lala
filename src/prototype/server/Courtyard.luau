@@ -40,7 +40,7 @@ local DECK_Y = 0.5
 -- the spawn sees the Sorcerer's front and striking arm at three-quarter view.
 Courtyard.SorcererCFrame = CFrame.new(-2.6, DECK_Y, -3.2) * CFrame.Angles(0, rad(-105), 0)
 -- Where the palm lands at contact, in the Sorcerer's frame (measured from the rig's pose).
-local DUMMY_OFFSET = CFrame.new(0.9, 0, -5.55) * CFrame.Angles(0, math.pi, 0)
+local DUMMY_OFFSET = CFrame.new(1.7, 0, -3.7) * CFrame.Angles(0, math.pi, 0)
 Courtyard.DummyCFrame = Courtyard.SorcererCFrame * DUMMY_OFFSET
 Courtyard.ChestCFrame = CFrame.new(9.5, 0, 3) * CFrame.Angles(0, rad(155), 0)
 Courtyard.SpawnCFrame = CFrame.new(0, 0.5, 17)
@@ -214,7 +214,7 @@ local function dummy(parent: Instance): Model
 		weldTo(body, Kit.cylinder(model, "Rope", 1.98, 0.18, cf * CFrame.new(0, y, 0), STRAW_DARK, M.Fabric))
 	end
 	-- Target disc on the front (local -Z faces the Sorcerer)
-	local hitY = 4.19
+	local hitY = 3.49
 	weldTo(
 		body,
 		Kit.part(

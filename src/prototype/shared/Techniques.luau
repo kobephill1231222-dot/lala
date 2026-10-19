@@ -1,20 +1,21 @@
 --!strict
--- Code-driven technique animation for the jointed rig (Shared Prototype.Rig). A technique is a
--- set of key poses placed in time around the moment of contact (t = 0): anticipation before
--- it, recovery after it. The client samples it on the server's hit timestamps, so contact
--- lands on the exact moment the hit is credited.
+-- Code-driven technique animation for the R6 rig (Prototype.Rig). A technique is a set of key
+-- poses placed in time around the moment of contact (t = 0): anticipation before it, recovery
+-- after it. The client samples it on the server's hit timestamps, so contact lands on the
+-- exact moment the hit is credited.
 --
 -- A raw pose holds:
---   root   { rx, ry, rz, x, y, z }  the LowerTorso's offset (degrees, unscaled studs)
---   joints { [joint]: { rx, ry, rz } } upper-body joints (degrees)
---   feet   { Left = { x, z, yaw }, Right = { x, z, yaw } } where each ankle stands (rig space)
---          and which way the foot points (degrees)
--- Legs are solved with two-bone IK so the feet stay planted while the body lunges and twists.
+--   root   { rx, ry, rz, x, y, z }   the Torso's offset from the root (degrees, unscaled studs)
+--   joints { [joint]: { rx, ry, rz } } Neck, Right Shoulder, Left Shoulder (degrees)
+--   feet   { Left = { x, z, side }, ... } where each foot should stand (rig space), and
+--          whether that leg leads (side 1) or trails (-1), which keeps its direction stable
+-- R6 legs have no knees, so each hip aims its leg at that spot and tilts it just enough to keep
+-- the sole on the ground: the feet stay where they are (sliding a little) while the body dips,
+-- twists and lunges, and never cross.
 --
--- Rotation conventions in this rig (front is -Z): +rx on a shoulder, elbow or hip swings
--- the limb forward; -rx on a knee bends it; +rx on a wrist lifts the fingers when the arm is
--- out front; +ry on Root, Waist or Neck turns to the left; +rz on a shoulder moves the hand
--- toward +X (the right).
+-- Rotations are in the parent part's space (front is -Z): +rx on a shoulder or hip swings the
+-- limb forward; +ry on Root or Neck turns to the left; +rz on the right shoulder lifts the arm
+-- out to the right (-rz for the left arm).
 
 local Techniques = {}
 
@@ -35,110 +36,68 @@ export type Technique = {
 	hand: string, -- part the hit leaves from
 }
 
--- Leg geometry of the rig (unscaled), from Prototype.Rig.
-local ROOT_AT = Vector3.new(0, 2.95, 0)
-local HIP_LOCAL = { Left = Vector3.new(-0.5, -0.26, 0), Right = Vector3.new(0.5, -0.26, 0) }
-local THIGH = 2.69 - 1.48
-local SHIN = 1.48 - 0.3
-local ANKLE_Y = 0.3
+-- R6 leg geometry (unscaled), from Prototype.Rig: hips pivot at the Torso's bottom corners and
+-- each sole is 2 studs below its pivot (and half a stud in).
+local TORSO_AT = Vector3.new(0, 3, 0)
+local HIP = { Left = Vector3.new(-1, -1, 0), Right = Vector3.new(1, -1, 0) }
+local SOLE = { Left = Vector3.new(0.5, -2, 0), Right = Vector3.new(-0.5, -2, 0) }
 
-local UPPER = {
-	"Waist",
-	"Neck",
-	"RightShoulder",
-	"RightElbow",
-	"RightWrist",
-	"LeftShoulder",
-	"LeftElbow",
-	"LeftWrist",
-}
+local UPPER = { "Neck", "Right Shoulder", "Left Shoulder" }
 Techniques.UpperJoints = UPPER
 
 local function pose(root: Vec, joints: { [string]: Vec }, feet: { [string]: Vec }): RawPose
 	return { root = root, joints = joints, feet = feet }
 end
 
--- Fighting stance: body turned a little to the right, guard up, weight low.
-Techniques.Stance = pose({ 0, -20, 0, 0, -0.12, 0 }, {
-	Waist = { -4, 5, 0 },
-	Neck = { 0, 15, 0 },
-	RightShoulder = { 30, 0, 12 },
-	RightElbow = { 95, 0, 0 },
-	RightWrist = { 0, 0, 0 },
-	LeftShoulder = { 55, 0, -10 },
-	LeftElbow = { 75, 0, 0 },
-	LeftWrist = { 10, 0, 0 },
-}, { Left = { -0.7, -0.55, -20 }, Right = { 0.75, 0.45, -20 } })
+local FIGHT = { Left = { -0.75, -0.9, 1 }, Right = { 0.8, 0.85, -1 } }
+local LUNGE = { Left = { -0.75, -1.3, 1 }, Right = { 0.8, 0.85, -1 } }
+
+-- Fighting stance: turned a little to the right, lead arm up, weight low.
+Techniques.Stance = pose({ 0, -18, 0, 0, -0.15, 0 }, {
+	Neck = { 0, 16, 0 },
+	["Right Shoulder"] = { 40, 0, 10 },
+	["Left Shoulder"] = { 70, 0, -10 },
+}, FIGHT)
 
 -- Resting while the Reward Chest is full: upright, arms loose, head down.
 Techniques.Rest = pose({ 0, 0, 0, 0, 0, 0 }, {
-	Waist = { 3, 0, 0 },
-	Neck = { 14, 0, 0 },
-	RightShoulder = { 6, 0, 6 },
-	RightElbow = { 18, 0, 0 },
-	RightWrist = { 0, 0, 0 },
-	LeftShoulder = { 6, 0, -6 },
-	LeftElbow = { 18, 0, 0 },
-	LeftWrist = { 0, 0, 0 },
-}, { Left = { -0.55, 0, 0 }, Right = { 0.55, 0, 0 } })
+	Neck = { 16, 0, 0 },
+	["Right Shoulder"] = { 6, 0, 4 },
+	["Left Shoulder"] = { 6, 0, -4 },
+}, { Left = { -0.6, 0, 0 }, Right = { 0.6, 0, 0 } })
 
--- Kai's Spark Palm: coil back, step in and drive the right palm into the target.
-local windup = pose({ 3, -45, 0, 0, -0.22, 0.25 }, {
-	Waist = { 6, -25, 0 },
-	Neck = { -5, 40, 0 },
-	RightShoulder = { -25, 0, 20 },
-	RightElbow = { 115, 0, 0 },
-	RightWrist = { 30, 0, 0 },
-	LeftShoulder = { 85, 0, -5 },
-	LeftElbow = { 15, 0, 0 },
-	LeftWrist = { 50, 0, 0 },
-}, { Left = { -0.7, -0.55, -20 }, Right = { 0.75, 0.45, -20 } })
-local coil = pose({ 4, -50, 0, 0, -0.25, 0.3 }, {
-	Waist = { 7, -28, 0 },
-	Neck = { -5, 44, 0 },
-	RightShoulder = { -28, 0, 22 },
-	RightElbow = { 118, 0, 0 },
-	RightWrist = { 34, 0, 0 },
-	LeftShoulder = { 86, 0, -5 },
-	LeftElbow = { 12, 0, 0 },
-	LeftWrist = { 55, 0, 0 },
-}, { Left = { -0.7, -0.55, -20 }, Right = { 0.75, 0.45, -20 } })
-local contact = pose({ -4, 20, 0, 0, -0.32, -0.45 }, {
-	Waist = { -12, 22, 0 },
-	Neck = { 5, -30, 0 },
-	RightShoulder = { 90, 0, 40 },
-	RightElbow = { 5, 0, 0 },
-	RightWrist = { 70, 0, 0 },
-	LeftShoulder = { 10, 0, -15 },
-	LeftElbow = { 110, 0, 0 },
-	LeftWrist = { 0, 0, 0 },
-}, { Left = { -0.7, -0.85, -20 }, Right = { 0.75, 0.45, -20 } })
-local impact = pose({ -5, 22, 0, 0, -0.34, -0.5 }, {
-	Waist = { -13, 24, 0 },
-	Neck = { 5, -32, 0 },
-	RightShoulder = { 91, 0, 41 },
-	RightElbow = { 3, 0, 0 },
-	RightWrist = { 74, 0, 0 },
-	LeftShoulder = { 8, 0, -15 },
-	LeftElbow = { 112, 0, 0 },
-	LeftWrist = { 0, 0, 0 },
-}, { Left = { -0.7, -0.85, -20 }, Right = { 0.75, 0.45, -20 } })
-local follow = pose({ -3, 16, 0, 0, -0.28, -0.4 }, {
-	Waist = { -9, 18, 0 },
-	Neck = { 3, -24, 0 },
-	RightShoulder = { 84, 0, 36 },
-	RightElbow = { 14, 0, 0 },
-	RightWrist = { 50, 0, 0 },
-	LeftShoulder = { 18, 0, -14 },
-	LeftElbow = { 104, 0, 0 },
-	LeftWrist = { 0, 0, 0 },
-}, { Left = { -0.7, -0.8, -20 }, Right = { 0.75, 0.45, -20 } })
+-- Kai's Spark Palm: coil back, lunge in and drive the right palm into the target.
+local windup = pose({ 4, -30, 0, 0, -0.3, 0.18 }, {
+	Neck = { -4, 28, 0 },
+	["Right Shoulder"] = { -50, 0, 25 },
+	["Left Shoulder"] = { 90, 0, -5 },
+}, FIGHT)
+local coil = pose({ 5, -33, 0, 0, -0.32, 0.2 }, {
+	Neck = { -4, 31, 0 },
+	["Right Shoulder"] = { -55, 0, 28 },
+	["Left Shoulder"] = { 92, 0, -5 },
+}, FIGHT)
+local contact = pose({ -8, 12, 0, 0, -0.42, -0.55 }, {
+	Neck = { 6, -12, 0 },
+	["Right Shoulder"] = { 98, 0, 10 },
+	["Left Shoulder"] = { -35, 0, -10 },
+}, LUNGE)
+local impact = pose({ -9, 14, 0, 0, -0.44, -0.6 }, {
+	Neck = { 6, -14, 0 },
+	["Right Shoulder"] = { 99, 0, 11 },
+	["Left Shoulder"] = { -38, 0, -10 },
+}, LUNGE)
+local follow = pose({ -6, 10, 0, 0, -0.38, -0.5 }, {
+	Neck = { 4, -10, 0 },
+	["Right Shoulder"] = { 92, 0, 8 },
+	["Left Shoulder"] = { -25, 0, -10 },
+}, LUNGE)
 
 Techniques.SparkPalm = {
 	name = "Spark Palm",
 	anticipation = 0.42,
 	recovery = 0.62,
-	hand = "RightHand",
+	hand = "Right Arm",
 	keys = {
 		{ t = -0.42, pose = Techniques.Stance },
 		{ t = -0.2, pose = windup, ease = "inOut" }, -- anticipation: coil back
@@ -163,7 +122,7 @@ local function ease(kind: string?, a: number): number
 end
 
 local function lerpVec(a: Vec, b: Vec, w: number): Vec
-	local out = table.create(#a)
+	local out = table.create(math.max(#a, #b))
 	for i = 1, math.max(#a, #b) do
 		local x, y = a[i] or 0, b[i] or 0
 		out[i] = x + (y - x) * w
@@ -217,11 +176,10 @@ function Techniques.breathe(raw: RawPose, clock: number, amount: number): RawPos
 	end
 	local s = math.sin(clock * math.pi * 2 / 3.2) * amount
 	local joints = table.clone(raw.joints)
-	local waist = joints.Waist or { 0, 0, 0 }
-	joints.Waist = { waist[1] + 1.5 * s, waist[2], waist[3] }
 	local neck = joints.Neck or { 0, 0, 0 }
-	joints.Neck = { neck[1] - 1.0 * s, neck[2], neck[3] }
+	joints.Neck = { neck[1] - 1.5 * s, neck[2], neck[3] }
 	local root = table.clone(raw.root)
+	root[1] = (root[1] or 0) + 1.2 * s
 	root[5] = (root[5] or 0) + 0.035 * s
 	return { root = root, joints = joints, feet = raw.feet }
 end
@@ -230,27 +188,31 @@ local function rotation(v: Vec): CFrame
 	return CFrame.Angles(rad(v[1] or 0), rad(v[2] or 0), rad(v[3] or 0))
 end
 
--- Two-bone IK for one leg. Returns hip, knee and ankle offsets that put the ankle on `foot`.
-local function solveLeg(rootFrame: CFrame, side: string, foot: Vec): (CFrame, CFrame, CFrame)
-	local target = Vector3.new(foot[1], ANKLE_Y, foot[2])
-	local hip = HIP_LOCAL[side]
-	local d = rootFrame:PointToObjectSpace(target) - hip
-	-- Abduction from the sideways offset, then a planar solve in the leg's swing plane.
-	local abduct = math.atan2(d.X, -d.Y)
-	local down = math.sqrt(d.X * d.X + d.Y * d.Y)
-	local dist =
-		math.clamp(math.sqrt(down * down + d.Z * d.Z), math.abs(THIGH - SHIN) + 1e-3, THIGH + SHIN - 1e-4)
-	local cosKnee = (THIGH * THIGH + SHIN * SHIN - dist * dist) / (2 * THIGH * SHIN)
-	local knee = -(math.pi - math.acos(math.clamp(cosKnee, -1, 1)))
-	local cosHip = (THIGH * THIGH + dist * dist - SHIN * SHIN) / (2 * THIGH * dist)
-	local swing = math.atan2(-d.Z, down) + math.acos(math.clamp(cosHip, -1, 1))
-	-- Abduct after the swing so the knee bends in the leg's own plane.
-	local hipRot = CFrame.Angles(0, 0, abduct) * CFrame.Angles(swing, 0, 0)
-	local kneeRot = CFrame.Angles(knee, 0, 0)
-	-- Keep the sole flat and planted: it points where the pose says, whatever the body does.
-	local level = CFrame.Angles(0, rad(foot[3] or 0), 0)
-	local ankleRot = (rootFrame.Rotation * hipRot * kneeRot):Inverse() * level
-	return hipRot, kneeRot, ankleRot
+-- Hip rotation that aims this leg at its foot spot with the sole on the ground (y = 0).
+local function solveHip(torso: CFrame, leg: string, foot: Vec): CFrame
+	local pivot = torso * HIP[leg]
+	local rest = torso.Rotation * SOLE[leg] -- where the sole would be with the hip at rest
+	local length = rest.Magnitude
+	local h = pivot.Y
+	local want: Vector3
+	if h >= length then
+		want = Vector3.new(0, -length, 0) -- out of reach: hang straight down
+	else
+		-- Toward the spot, nudged the way the leg leads or trails, so the direction can't flip
+		-- when the hip passes over the spot.
+		local forward = Vector3.new(torso.LookVector.X, 0, torso.LookVector.Z).Unit
+		local flat = Vector3.new(foot[1] - pivot.X, 0, foot[2] - pivot.Z) + forward * (0.6 * (foot[3] or 0))
+		local dir = if flat.Magnitude > 1e-4 then flat.Unit else Vector3.new(0, 0, 0)
+		want = dir * math.sqrt(length * length - h * h) - Vector3.new(0, h, 0)
+	end
+	-- Shortest rotation (in the Torso's space) from the rest leg onto the wanted one.
+	local a = SOLE[leg].Unit
+	local b = torso.Rotation:Inverse() * want.Unit
+	local axis = a:Cross(b)
+	if axis.Magnitude < 1e-6 then
+		return CFrame.new()
+	end
+	return CFrame.fromAxisAngle(axis.Unit, math.acos(math.clamp(a:Dot(b), -1, 1)))
 end
 
 -- Turns a raw pose into joint offsets for Rig.apply. `scale` is the rig's build scale.
@@ -258,22 +220,36 @@ function Techniques.resolve(raw: RawPose, scale: number): { [string]: CFrame }
 	local r = raw.root
 	local rootRot = rotation(r)
 	local rootOffset = Vector3.new(r[4] or 0, r[5] or 0, r[6] or 0)
+	-- Rigid legs can only stand on their spots at one height. The body rises or sinks to the
+	-- height the lower-reaching leg needs, so that foot lands on its spot and the other one
+	-- lands just past its own (never floating). The pose's own height is only a starting point.
+	local probe = CFrame.new(TORSO_AT + rootOffset) * rootRot
+	local adjust = math.huge
+	for _, leg in { "Left", "Right" } do
+		local foot = raw.feet[leg]
+		if foot then
+			local pivot = probe * HIP[leg]
+			local length = SOLE[leg].Magnitude
+			local dist = math.min(Vector3.new(foot[1] - pivot.X, 0, foot[2] - pivot.Z).Magnitude, length)
+			adjust = math.min(adjust, math.sqrt(length * length - dist * dist) - pivot.Y)
+		end
+	end
+	if adjust < math.huge then
+		rootOffset += Vector3.new(0, adjust, 0)
+	end
 	local out: { [string]: CFrame } = {}
-	out.Root = CFrame.new(rootOffset * scale) * rootRot
+	out.RootJoint = CFrame.new(rootOffset * scale) * rootRot
 	for _, name in UPPER do
 		local v = raw.joints[name]
 		if v then
 			out[name] = rotation(v)
 		end
 	end
-	local rootFrame = CFrame.new(ROOT_AT + rootOffset) * rootRot
-	for _, side in { "Left", "Right" } do
-		local foot = raw.feet[side]
+	local torso = CFrame.new(TORSO_AT + rootOffset) * rootRot
+	for _, leg in { "Left", "Right" } do
+		local foot = raw.feet[leg]
 		if foot then
-			local hip, knee, ankle = solveLeg(rootFrame, side, foot)
-			out[side .. "Hip"] = hip
-			out[side .. "Knee"] = knee
-			out[side .. "Ankle"] = ankle
+			out[leg .. " Hip"] = solveHip(torso, leg, foot)
 		end
 	end
 	return out

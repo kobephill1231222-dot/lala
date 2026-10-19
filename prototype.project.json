@@ -25,6 +25,8 @@
       "$properties": {
         "CameraMaxZoomDistance": 60,
         "CameraMinZoomDistance": 6,
+        "EnableMouseLockOption": false,
+        "GameSettingsAvatar": "R6",
         "CharacterWalkSpeed": 18,
         "LoadCharacterAppearance": true
       },

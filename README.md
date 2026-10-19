@@ -11,6 +11,10 @@ scripts in this repo.
 
 ![Your Farm](docs/previews/05_farm_inside.jpg)
 
+> **Now top-down, with R6 avatars.** The camera looks down on you from above, like a 2D
+> top-down game, while you walk the farm and plaza. Players are R6, and the prototype's Sorcerer
+> is a real R6 rig (see *Play it in Studio*).
+
 > **Current state (after the October 2 Studio audit):** the defects the audit confirmed are
 > fixed (see *Audit fixes*). The orb conveyor is rejected. Its replacement is now built as a
 > separate place for review: **[`dist/Prototype.rbxl`](dist/Prototype.rbxl)**, one Sorcerer
@@ -34,6 +38,20 @@ scripts in this repo.
 2. Press **Play**. You spawn at Your Farm. A card at the top of the screen walks you through
    the loop, and a glowing beam points to each next stop.
 
+**It plays top-down.** The camera looks down on your avatar from high above at a fixed angle
+and never rotates, so it reads like a 2D top-down game while you walk the farm and plaza
+(WASD or the thumbstick). Your Farm sits upright on screen: its back at the top, its entrance
+and the plaza below. Zoom with the mouse wheel, **I** / **O**, or pinch. Roofs, gate beams and
+tree canopies fade while you stand under them, so they never hide you. Sorcerers, Crates and
+the Orb Box never fade. The camera is in `src/shared/Visuals/TopDownCamera.luau`. Its angle,
+distance and field of view are settings at the top of the file.
+
+**Avatars are R6.** Both places set `StarterPlayer.GameSettingsAvatar` to R6, and nothing in
+the game depends on R15 body parts. After publishing, check **Game Settings > Avatar** also
+says R6 (Studio keeps the experience's own setting there).
+
+![Your Farm from the top-down camera, zoomed out](docs/previews/topdown_farm.jpg)
+
 Saving in Studio: publish the place, then turn on **Game Settings > Security > Enable Studio
 Access to API Services**. Without it the game runs on a temporary in-memory store and says so
 in a toast. It never writes fake data.
@@ -50,12 +68,15 @@ Before publishing for real players:
 This is Decision C from [`docs/NEXT_STEPS_PROPOSAL.md`](docs/NEXT_STEPS_PROPOSAL.md): prove
 the replacement for the orb conveyor on one farm before anything is rebuilt six times.
 
-![Spark Palm, frame by frame](docs/previews/prototype_strike.gif)
+![Spark Palm from the top-down camera](docs/previews/prototype_strike_topdown.gif)
+
+The same strike from the side ([GIF](docs/previews/prototype_strike.gif)): stance, wind-up,
+contact, follow-through and rest.
 
 ![Stance, wind-up, contact, follow-through, rest](docs/previews/prototype_poses.jpg)
 
-**Open `dist/Prototype.rbxl` in Studio and press Play.** You spawn facing a training post in
-a small courtyard. **Kai** stands in a fighting stance facing a straw training dummy. Every
+**Open `dist/Prototype.rbxl` in Studio and press Play.** You spawn south of a training post in
+a small courtyard, with the same top-down camera as the game (north up). **Kai** stands in a fighting stance facing a straw training dummy. Every
 2 seconds he coils back, steps in and drives a Spark Palm into the dummy's target. On contact
 the dummy rocks back and flashes, sparks and a ring burst from the hit point, **+$4** pops above
 it with an impact sound, and a coin flies into the **Reward Chest**. The chest's label and bar
@@ -77,22 +98,26 @@ What's different from the orb conveyor:
   lands on exactly those timestamps, from the same replicated numbers. A hit you see is a hit
   that was paid, and the reverse (audit bug 5). Frame hitches merge beats into one strike
   with their combined value. They never drop one.
-- **Real limb animation.** Kai is a jointed rig with R15 part and joint names, posed from code
-  through its Motor6Ds (no uploads). The legs use IK, so the feet stay planted while the body
-  lunges. Because the names match R15, the same poses can drive a Marketplace-item rig later.
+- **Real limb animation on an R6 rig.** Kai is a standard R6 rig: Torso, Head, two arms and two
+  legs, the R6 Motor6Ds (RootJoint, Neck, shoulders, hips) with their standard offsets, and an
+  inert R6 Humanoid. He is posed from code (no uploads). R6 legs have no knees, so each hip aims
+  its leg at the foot's spot and the body rises or sinks to the height the legs need. The
+  soles stay on the ground, the front foot steps into the lunge, and the feet never cross.
+  Because it's a real R6 rig, a Marketplace R6 avatar (or HumanoidDescription) can replace it
+  and the same poses still work.
 - **Collect at the farm (A1).** No carry trip to the plaza.
 - **Storage in minutes of income (B).** The chest holds 5 minutes of the Sorcerer's income.
   The offline vault rule (2 hours, upgradable to 8, paid once per absence) is written and
   unit-tested, but this place doesn't save, so it isn't wired in yet.
 
 I picked those defaults myself because the proposal's questions were still open: A1, the
-proposed storage targets, and code-driven animation. Each one is a single setting in
+proposed storage targets, and code-driven animation (now on R6). Each one is a single setting in
 `src/prototype/shared/PrototypeConfig.luau` or the technique keys in `Techniques.luau`.
 **Tell me if you want any of them changed.** Visuals are still primitives (no catalog
 access). Sounds are client-bundled placeholders. The checklist for reviewing it in Studio is
 [`docs/PROTOTYPE_REVIEW.md`](docs/PROTOTYPE_REVIEW.md).
 
-![The courtyard](docs/previews/prototype_arrival.jpg)
+![The courtyard from the top-down camera](docs/previews/prototype_topdown.jpg)
 
 ## The loop
 
@@ -129,6 +154,7 @@ world signs, prompts, the tutorial and notifications. (The only extra prompt wor
 | Pick Up (Sorcerer or Crate) | **R** at the prompt | Tap the prompt | Y |
 | Placement | Hover a glowing slot or pad and click it | Tap a target, then **Place** | D-pad, then A |
 | Sorcerers / Crates / Crate Shop / Upgrade Shop / Home | G / C / B / U / H | Right-side buttons | |
+| Zoom the top-down camera | Mouse wheel, I / O | Pinch | |
 
 You can also just walk: the Collect Pad collects and the Sell Stand sells when you step on them.
 
@@ -256,17 +282,19 @@ default.project.json         Rojo project (Shared -> ReplicatedStorage, Server -
 src/shared/Config/           GameConfig, Sorcerers, Crates, Rarities, Upgrades, FarmLayout, SoundConfig
 src/shared/Rules/            Economy (formulas), Actions (authoritative actions), ProfileSchema
                              (shape, sanitizing, migration), Tutorial
-src/shared/Visuals/          CharacterModels (Sorcerers + companions), CrateModels, PartKit
+src/shared/Visuals/          CharacterModels (Sorcerers + companions), CrateModels, PartKit,
+                             TopDownCamera (overhead camera, zoom, overhead fade)
 src/server/Services/         DataService (+ Data/ProfileStore, MockDataStore), StateService,
                              FarmService (farms, models, carried box, spawning), GameService
                              (requests, validation, touch pads), MapService
 src/server/Map/              MapBuilder, Plaza, Farm, Scenery, Kit (architecture/nature pieces),
                              Palette, Atmosphere
-src/client/Controllers/      State, UI (HUD), World (prompts, labels), Production (techniques,
+src/client/Controllers/      State, Camera (top-down, Your Farm upright), UI (HUD), World (prompts, labels), Production (techniques,
                              orbs, lane, box fill), Effects, Reveal, Placement, Tutorial, Sound,
                              Notification
 src/client/UI/               UIKit, Theme, Panels/ (Sorcerers, Crates, CrateShop, UpgradeShop, Settings)
 tests/                       rules.spec (economy, crates, box, offline, upgrades, tutorial), data.spec,
+                             camera.spec (top-down view, overhead fade on the real map),
                              prototype.spec (hit schedule, chest, offline vault, technique, rig)
 tools/lune/                  bake, test, integration, client_smoke, simulate, models,
                              prototype_bake, prototype_test, prototype_frames + lib/ (sandbox,
@@ -276,8 +304,8 @@ dist/JJKFarm.rbxl            the built place: map, lighting and all scripts
 
 prototype.project.json       Rojo project for the training-post prototype (reuses src/shared and
                              src/server/Map)
-src/prototype/shared/        PrototypeConfig, HitSchedule (the one schedule), Rig (jointed R15-named
-                             rig), Techniques (key poses, leg IK)
+src/prototype/shared/        PrototypeConfig, HitSchedule (the one schedule), Rig (standard R6 rig),
+                             Techniques (key poses, R6 leg solve)
 src/prototype/server/        Main (schedule, chest, review switches), Courtyard (the map)
 src/prototype/client/        Main, TrainingView (strikes, dummy, payout), ChestView, Hud, Fx
 dist/Prototype.rbxl          the built prototype place
@@ -334,17 +362,17 @@ against the same scripts and the same baked place file:
 | Check | Result |
 |---|---|
 | `luau-lsp analyze` with Roblox type definitions over `src/server`, `src/client` and `src/shared` | 0 errors |
-| Unit tests (economy, crates and odds, Orb Box, collect/sell, offline cap and once-only claim, upgrades, tutorial and detour guidance, profile validation and repair, lease locking with two servers including the audit's 12-second case, handoff, newer-version refusal, quarantine, finished-crate pickup) | 53 / 53 pass |
+| Unit tests (economy, crates and odds, Orb Box, collect/sell, offline cap and once-only claim, upgrades, tutorial and detour guidance, profile validation and repair, lease locking with two servers including the audit's 12-second case, handoff, newer-version refusal, quarantine, finished-crate pickup), and the top-down camera (view geometry, Your Farm upright for every farm, overhead index and fade, and on the real map: roofs and gates fade, while no slot, pad or Orb Box is ever covered) | 59 / 59 pass |
 | **Server playtest**: the real `Main.server.luau` in a Lune engine shim against `dist/JJKFarm.rbxl`, playing **Starter Crate -> Place -> Opening Time -> Open -> Place Sorcerer -> orbs fill the box -> Collect -> carry -> Sell -> Buy -> Upgrade** through the remotes. Also: touch pads, reinvesting (slots, pads, walk speed, Pick Up and re-place of a crate keeping its time, swaps, Sorcerer Upgrade, Pick Up), validation and rate limits, a second player who can't touch your farm, respawn at Your Farm, leave/save/release, offline progress paid once, a failed-load kick that leaves data untouched, malformed and newer saves refused untouched, a live lease on another server never taken, changes paused near lease expiry, release handoff, touch pads range- and alive-checked, and shutdown saves | 127 / 127 checks pass |
-| **Client smoke test**: the real client scripts with a stubbed engine. HUD (including on-screen menu bounds at seven screen sizes from portrait phone to 1440p), every prompt and its text, production (technique animations fire, orbs travel the lane, the box fill rises), crate timers, every panel and button, placement previews for Sorcerers and Crates, all effects, notifications, every tutorial step, the crate reveal through to Place, and hotkeys | 23 / 23 steps pass |
+| **Client smoke test**: the real client scripts with a stubbed engine. HUD (including on-screen menu bounds at seven screen sizes from portrait phone to 1440p), every prompt and its text, production (technique animations fire, orbs travel the lane, the box fill rises), crate timers, every panel and button, placement previews for Sorcerers and Crates, all effects, notifications, every tutorial step, the crate reveal through to Place, hotkeys, and the top-down camera (takes over, follows from above, Your Farm upright, wheel, I/O and pinch zoom, the gate fading overhead and restoring, Sorcerers never faded) | 24 / 24 steps pass |
 | Economy pacing simulation (2-hour bot) | see *Pacing* |
 | Bake contract checks (6 farms x 10 slots x 4 pads, rings, locks, lane, Orb Box, Collect Pad, Sell Pad, crate displays, shop counters, spawn) | pass |
 | Map scale and composition | reviewed in aerial, plaza, gate, slot, pad, shop and Sell Stand previews with 5.2-stud avatar stand-ins |
 | Prototype: `luau-lsp analyze` over `src/prototype` | 0 errors |
-| Prototype unit tests: beat timing at real server-time magnitudes, combos, chest capacity and full-chest stop, never paying a beat twice, a frame-by-frame viewer seeing exactly the credited beats through stalls, offline vault, attribute round trip, R15 joints, strike fits the shortest beat, furthest reach exactly at contact and into the dummy's target, feet planted and level through the strike | 16 / 16 pass |
+| Prototype unit tests: beat timing at real server-time magnitudes, combos, chest capacity and full-chest stop, never paying a beat twice, a frame-by-frame viewer seeing exactly the credited beats through stalls, offline vault, attribute round trip, standard R6 parts, joints, offsets and Humanoid, body-space poses through R6 joint frames, strike fits the shortest beat, furthest reach exactly at contact and into the dummy's target, soles on the ground with the feet never crossing or jumping, the lunge | 17 / 17 pass |
 | Prototype server: the real `Main.server.luau` in the engine shim against `dist/Prototype.rbxl`. Owner assignment, out-of-range and dead players refused, exact payout at the chest, empty chest, 5-minute cap, quiet pad collect, other players refused, both review switches (and only for the owner), handover when the owner leaves | 13 / 13 pass |
-| Prototype client: the real client scripts with a stubbed engine. Stance before the first wind-up, contact on the beat's timestamp, no replayed hit when the server clock steps back, payout popup, flash, sparks and sound, effects cleaned up, every credited beat shown through 0.9 s and 5 s stalls, chest display, resting while full, resuming after collect, recovery surviving a collect, a cancelled wind-up easing out (and its hit never landing), x3 combos | 13 / 13 pass |
-| Prototype look | strike rendered frame by frame from the real poses (GIF above), courtyard stills |
+| Prototype client: the real client scripts with a stubbed engine. Stance before the first wind-up, contact on the beat's timestamp, no replayed hit when the server clock steps back, payout popup, flash, sparks and sound, effects cleaned up, every credited beat shown through 0.9 s and 5 s stalls, chest display, resting while full, resuming after collect, recovery surviving a collect, a cancelled wind-up easing out (and its hit never landing), x3 combos, and the top-down camera (north up, the dojo roof fading when you walk in, the Sorcerer, dummy and chest never fading) | 14 / 14 pass |
+| Prototype look | the R6 strike rendered frame by frame from the real poses, from the top-down camera (GIF above) and from the side (pose sheet), plus top-down stills of the courtyard and Your Farm |
 
 The offline engine can't simulate physics, rendering, real input or networking. **Please do
 a manual pass in Studio** with `docs/PLAYTEST_CHECKLIST.md`.
@@ -359,6 +387,10 @@ a manual pass in Studio** with `docs/PLAYTEST_CHECKLIST.md`.
 - **In the main game, technique animations move the whole Sorcerer** (lunge, sweep, rise,
   recoil) plus effects. The prototype has real jointed limb animation, which will replace it
   once the prototype is approved.
+- **The main game's Sorcerers are still part-built models, not R6 rigs.** They move to the
+  prototype's R6 rig once the prototype is approved.
+- **Top-down camera not tried in Studio.** Check that the angle and zoom feel right, and that
+  WASD moves the way the screen suggests.
 - **Prototype not run in Roblox Studio either.** Things the offline engine can't show:
   whether Motor6D posing from a LocalScript looks smooth on the anchored rig, real sound
   levels, Highlight and particle looks, and the chest prompt's feel.

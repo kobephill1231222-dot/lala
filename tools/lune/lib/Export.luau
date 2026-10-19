@@ -1,6 +1,8 @@
 --!nocheck
 -- Serialises built geometry (parts, lights, recorded terrain ops) to JSON for the
 -- three.js preview renderer in tools/preview.
+local roblox = require("@lune/roblox")
+
 local Export = {}
 
 local SHAPES = { Block = "b", Ball = "s", Cylinder = "c", Wedge = "w", CornerWedge = "cw" }
@@ -38,15 +40,22 @@ function Export.collect(root, out)
 					end, "Block")
 					shape = SHAPES[s] or "b"
 				end
+				local cf, size, color = inst.CFrame, inst.Size, inst.Color
 				if shape == "b" then
 					local mesh = inst:FindFirstChildOfClass("SpecialMesh")
-					if mesh and safe(function()
+					local meshType = mesh and safe(function()
 						return mesh.MeshType.Name
-					end, "") == "Sphere" then
+					end, "")
+					if meshType == "Sphere" then
 						shape = "e"
+					elseif meshType == "Head" then
+						-- The classic R6 head: about a vertical cylinder, sized by depth and height.
+						local scale = mesh.Scale
+						shape = "c"
+						cf = cf * roblox.CFrame.Angles(0, 0, math.pi / 2)
+						size = roblox.Vector3.new(size.Y * scale.Y, size.Z * scale.Z, size.Z * scale.Z)
 					end
 				end
-				local cf, size, color = inst.CFrame, inst.Size, inst.Color
 				local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
 				table.insert(out.parts, {
 					k = shape,

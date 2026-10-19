@@ -447,7 +447,8 @@ function ProductionController.start()
 	RunService.Heartbeat:Connect(function(dt)
 		clock += dt
 		local camera = workspace.CurrentCamera
-		local camPos = if camera then camera.CFrame.Position else Vector3.zero
+		-- From what the camera looks at (the top-down camera sits high above it).
+		local camPos = if camera then camera.Focus.Position else Vector3.zero
 		for _, farm in farms do
 			stepFarm(farm, dt, camPos)
 		end

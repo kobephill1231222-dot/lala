@@ -14,12 +14,14 @@ this has been checked in Studio yet. Open the place and press **Play**.
       pops at the same moment.
 - [ ] **The payout connects to the chest.** A coin arcs from the dummy into the Reward Chest,
       and the chest's number goes up as it lands.
-- [ ] **Limbs, not sliding.** Arms, torso, head and legs move. Feet stay planted while the
-      body lunges (the front foot takes a small step).
+- [ ] **R6, and limbs not sliding.** Kai is an R6 rig: arms, head and legs swing from the
+      torso. The soles stay on the ground while he lunges, the front foot steps in, and the
+      feet never cross.
 - [ ] **Idle and rest.** Between strikes Kai holds a fighting stance and breathes. When the
       chest is full he relaxes, arms down, head lowered.
-- [ ] **Readable from where you arrive.** From the spawn you see Kai's front and his striking
-      arm at three-quarter view, with the dummy in front of him and the chest to the right.
+- [ ] **Readable from the top-down camera.** From above you can see Kai's arm drive into the
+      dummy, the dummy rock back and the coin fly to the chest. Zoom in (mouse wheel, I, or
+      pinch) to see the strike closer. Walk into the dojo and its roof fades.
 
 ## What to check (behaviour)
 
@@ -57,7 +59,9 @@ The prototype assumed these while the proposal's questions were open. Each is on
 | B: chest storage | 5 minutes of income | `ChestStorageSeconds` in `src/prototype/shared/PrototypeConfig.luau` |
 | B: offline vault | 2 hours, upgradable to 8 | `OfflineVaultSeconds`, `OfflineVaultMaxSeconds` (same file) |
 | Hit rate and value | 1 hit / 2 s, $4 per hit (Kai's $2/s) | `Presets.Normal` (same file) |
-| Animation | code-driven joints, no uploads | key poses in `src/prototype/shared/Techniques.luau` |
+| Animation | code-driven R6 joints, no uploads | key poses in `src/prototype/shared/Techniques.luau` |
+| Rig and avatars | R6 (Sorcerer rig and players) | `src/prototype/shared/Rig.luau`, `GameSettingsAvatar` in the project files |
+| Camera | top-down, 80° pitch, fixed north-up | constants at the top of `src/shared/Visuals/TopDownCamera.luau` |
 | Strike timing | 0.42 s wind-up, 0.62 s recovery | `Techniques.SparkPalm` keys |
 
 Once the look and feel is approved, the plan is to move this schedule and rig into the full

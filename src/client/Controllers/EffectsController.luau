@@ -64,9 +64,11 @@ local function tween(inst: Instance, seconds: number, props: { [string]: any }, 
 	return t
 end
 
+-- Measured from the camera's focus (the point it looks at), not the camera itself: the
+-- top-down camera sits up to 150 studs above what you're watching.
 local function nearCamera(position: Vector3, radius: number): boolean
 	local camera = workspace.CurrentCamera
-	return camera ~= nil and (camera.CFrame.Position - position).Magnitude < radius
+	return camera ~= nil and (camera.Focus.Position - position).Magnitude < radius
 end
 
 function EffectsController.burst(

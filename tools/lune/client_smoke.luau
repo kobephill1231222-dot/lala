@@ -43,6 +43,7 @@ for _, pair in
 		{ "RemoteEvent", "OnClientEvent" },
 		{ "UserInputService", "InputBegan" },
 		{ "UserInputService", "InputChanged" },
+		{ "UserInputService", "TouchPinch" },
 		{ "UserInputService", "LastInputTypeChanged" },
 		{ "Instance", "ChildAdded" },
 		{ "Instance", "ChildRemoved" },
@@ -79,6 +80,12 @@ roblox.implementMethod("RemoteFunction", "InvokeServer", function(_, action, _pa
 	return { ok = true, data = CANNED[action] or {} }
 end)
 roblox.implementMethod("RemoteEvent", "FireServer", function() end)
+roblox.implementMethod("RunService", "BindToRenderStep", function(rs, _name, _priority, fn)
+	rs.RenderStepped:Connect(fn)
+end)
+roblox.implementMethod("DataModel", "IsLoaded", function()
+	return true
+end)
 roblox.implementMethod("TweenService", "Create", function(_, inst, _info, props)
 	local completed = fakeSignal()
 	return {
@@ -323,6 +330,54 @@ step("receives first state snapshot", function()
 	frames(5)
 	assert(StateController.profile ~= nil, "profile not stored")
 	assert(StateController.farm() == 1, "farm not known")
+end)
+step("top-down camera: follows you from above, Your Farm upright, zoom, roofs fade overhead", function()
+	local TopDownCamera = sb.requirePath("ReplicatedStorage/Shared/Visuals/TopDownCamera")
+	local Enum = roblox.Enum
+	frames(60)
+	assert(camera.CameraType == Enum.CameraType.Scriptable, "camera not taken over")
+	-- Sorcerers and crates on farms (runtime) are never treated as overhead.
+	for _, list in TopDownCamera.state.overhead.cells do
+		for _, part in list do
+			assert(part:FindFirstAncestor("Runtime") == nil, part:GetFullName() .. " would fade")
+		end
+	end
+	local root = character.HumanoidRootPart.CFrame.Position
+	local cf = camera.CFrame
+	assert(cf.Position.Y - root.Y > 60, "camera should be high above the character")
+	assert(cf.LookVector:Dot((root - cf.Position).Unit) > 0.999, "character should be centred")
+	local up = roblox.Vector3.new(cf.UpVector.X, 0, cf.UpVector.Z).Unit
+	local back = -Layout.farmCFrame(1).LookVector
+	assert(up:Dot(roblox.Vector3.new(back.X, 0, back.Z).Unit) > 0.99, "Your Farm should be upright")
+	local zoom = TopDownCamera.state.zoomTo
+	uis.InputChanged:FireSync(
+		{ UserInputType = Enum.UserInputType.MouseWheel, Position = roblox.Vector3.new(0, 0, 1) },
+		false
+	)
+	assert(TopDownCamera.state.zoomTo < zoom, "wheel up should zoom in")
+	uis.InputBegan:FireSync({ KeyCode = Enum.KeyCode.O, UserInputType = Enum.UserInputType.Keyboard }, false)
+	uis.InputBegan:FireSync({ KeyCode = Enum.KeyCode.O, UserInputType = Enum.UserInputType.Keyboard }, false)
+	assert(TopDownCamera.state.zoomTo > zoom, "O should zoom out")
+	uis.TouchPinch:FireSync({}, 1, 0, Enum.UserInputState.Begin, false)
+	uis.TouchPinch:FireSync({}, 100, 0, Enum.UserInputState.Change, false)
+	assert(TopDownCamera.state.zoomTo == TopDownCamera.MinDistance, "pinch zoom clamps")
+	-- Standing under Your Farm's gate fades it; walking out restores it.
+	character.HumanoidRootPart.CFrame = Layout.homeCFrame(1)
+	frames(10)
+	local faded = {}
+	for part in TopDownCamera.state.faded do
+		assert(math.abs(part.LocalTransparencyModifier - TopDownCamera.FadedTransparency) < 1e-6, "not faded")
+		table.insert(faded, part)
+	end
+	assert(#faded > 0, "gate overhead should fade")
+	character.HumanoidRootPart.CFrame = Layout.slotWorld(1, 5) * roblox.CFrame.new(6, 3, 0)
+	frames(10)
+	for _, part in faded do
+		assert(part.LocalTransparencyModifier == 0, "fade not restored")
+	end
+	character.HumanoidRootPart.CFrame = Layout.homeCFrame(1)
+	TopDownCamera.state.zoomTo = TopDownCamera.Distance
+	frames(30)
 end)
 step("HUD shows Cash, income and the Orb Box", function()
 	local gui = playerGui:FindFirstChild("JJKFarmUI")
