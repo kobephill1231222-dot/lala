@@ -12,11 +12,12 @@ scripts in this repo.
 ![Your Farm](docs/previews/05_farm_inside.jpg)
 
 > **Current state (after the October 2 Studio audit):** the defects the audit confirmed are
-> fixed (see *Audit fixes*). The orb conveyor is rejected, and the part-built characters and
-> props are being replaced with Marketplace avatar items and Toolbox models. That work is
-> planned in [`docs/NEXT_STEPS_PROPOSAL.md`](docs/NEXT_STEPS_PROPOSAL.md) and waits on a few
-> decisions plus network access to Roblox's catalog. Until then the visuals in this build
-> are the old prototype ones.
+> fixed (see *Audit fixes*). The orb conveyor is rejected. Its replacement is now built as a
+> separate place for review: **[`dist/Prototype.rbxl`](dist/Prototype.rbxl)**, one Sorcerer
+> on a training post striking a dummy, paying into a Reward Chest (see *Training-post
+> prototype*). Nothing in `dist/JJKFarm.rbxl` has changed yet. The switch to Marketplace
+> avatar items and Toolbox models ([`docs/NEXT_STEPS_PROPOSAL.md`](docs/NEXT_STEPS_PROPOSAL.md))
+> still waits on network access to Roblox's catalog.
 
 > **Studio status: I had no Roblox Studio connection.** This was built in a cloud container
 > without Studio, so **no checks ran in Roblox Studio**. The handoff is the place file
@@ -43,6 +44,55 @@ Before publishing for real players:
   Each server has six farms. A seventh player can walk around but gets a toast that every
   farm is taken.
 - Optional: add music and ambient audio IDs (see *Sound*).
+
+## Training-post prototype
+
+This is Decision C from [`docs/NEXT_STEPS_PROPOSAL.md`](docs/NEXT_STEPS_PROPOSAL.md): prove
+the replacement for the orb conveyor on one farm before anything is rebuilt six times.
+
+![Spark Palm, frame by frame](docs/previews/prototype_strike.gif)
+
+![Stance, wind-up, contact, follow-through, rest](docs/previews/prototype_poses.jpg)
+
+**Open `dist/Prototype.rbxl` in Studio and press Play.** You spawn facing a training post in
+a small courtyard. **Kai** stands in a fighting stance facing a straw training dummy. Every
+2 seconds he coils back, steps in and drives a Spark Palm into the dummy's target. On contact
+the dummy rocks back and flashes, sparks and a ring burst from the hit point, **+$4** pops above
+it with an impact sound, and a coin flies into the **Reward Chest**. The chest's label and bar
+count up, the gold inside rises and the lid lifts as it fills. Press **E** at the chest or step
+on its gold pad to collect, and the lid throws open with a burst of gold. When the chest is
+full, Kai rests and the label says FULL until you collect.
+
+The **review board** on the left has two switches for checking the edge cases quickly:
+
+- **Fast Sorcerer (F):** hits every 0.4 s, faster than one strike can be drawn. Every three
+  hits share one strike, and the popup says **x3 +$3**. Press again to go back.
+- **Fill chest (G):** marks the chest full right away, so you can see Kai rest and collect
+  $600 without waiting 5 minutes.
+
+What's different from the orb conveyor:
+
+- **One schedule.** The server credits hits from `floor((now - placedAt) / beat)`
+  (`src/prototype/shared/HitSchedule.luau`). The client plays each strike so that contact
+  lands on exactly those timestamps, from the same replicated numbers. A hit you see is a hit
+  that was paid, and the reverse (audit bug 5). Frame hitches merge beats into one strike
+  with their combined value. They never drop one.
+- **Real limb animation.** Kai is a jointed rig with R15 part and joint names, posed from code
+  through its Motor6Ds (no uploads). The legs use IK, so the feet stay planted while the body
+  lunges. Because the names match R15, the same poses can drive a Marketplace-item rig later.
+- **Collect at the farm (A1).** No carry trip to the plaza.
+- **Storage in minutes of income (B).** The chest holds 5 minutes of the Sorcerer's income.
+  The offline vault rule (2 hours, upgradable to 8, paid once per absence) is written and
+  unit-tested, but this place doesn't save, so it isn't wired in yet.
+
+I picked those defaults myself because the proposal's questions were still open: A1, the
+proposed storage targets, and code-driven animation. Each one is a single setting in
+`src/prototype/shared/PrototypeConfig.luau` or the technique keys in `Techniques.luau`.
+**Tell me if you want any of them changed.** Visuals are still primitives (no catalog
+access). Sounds are client-bundled placeholders. The checklist for reviewing it in Studio is
+[`docs/PROTOTYPE_REVIEW.md`](docs/PROTOTYPE_REVIEW.md).
+
+![The courtyard](docs/previews/prototype_arrival.jpg)
 
 ## The loop
 
@@ -216,11 +266,21 @@ src/client/Controllers/      State, UI (HUD), World (prompts, labels), Productio
                              orbs, lane, box fill), Effects, Reveal, Placement, Tutorial, Sound,
                              Notification
 src/client/UI/               UIKit, Theme, Panels/ (Sorcerers, Crates, CrateShop, UpgradeShop, Settings)
-tests/                       rules.spec (economy, crates, box, offline, upgrades, tutorial), data.spec
-tools/lune/                  bake, test, integration, client_smoke, simulate, models + lib/ (sandbox,
+tests/                       rules.spec (economy, crates, box, offline, upgrades, tutorial), data.spec,
+                             prototype.spec (hit schedule, chest, offline vault, technique, rig)
+tools/lune/                  bake, test, integration, client_smoke, simulate, models,
+                             prototype_bake, prototype_test, prototype_frames + lib/ (sandbox,
                              engine shim, preview staging)
 tools/preview/               three.js renderer for offline previews
 dist/JJKFarm.rbxl            the built place: map, lighting and all scripts
+
+prototype.project.json       Rojo project for the training-post prototype (reuses src/shared and
+                             src/server/Map)
+src/prototype/shared/        PrototypeConfig, HitSchedule (the one schedule), Rig (jointed R15-named
+                             rig), Techniques (key poses, leg IK)
+src/prototype/server/        Main (schedule, chest, review switches), Courtyard (the map)
+src/prototype/client/        Main, TrainingView (strikes, dummy, payout), ChestView, Hud, Fx
+dist/Prototype.rbxl          the built prototype place
 ```
 
 ## Building from source
@@ -229,7 +289,7 @@ Tools (pinned in `rokit.toml`): Rojo 7.5.1, Lune 0.10.4, StyLua 2.1.0, luau-lsp 
 Selene 0.29.0. Install them with [rokit](https://github.com/rojo-rbx/rokit) (`rokit install`).
 
 ```bash
-scripts/build.sh                                      # build + bake + all tests
+scripts/build.sh                                      # build + bake + all tests (both places)
 LUAU_DEFS=path/to/globalTypes.d.luau scripts/build.sh # also run type analysis
 PREVIEW=1 scripts/build.sh                            # also render previews (needs Node)
 ```
@@ -237,7 +297,8 @@ PREVIEW=1 scripts/build.sh                            # also render previews (ne
 To live-sync code while editing in Studio: open `dist/JJKFarm.rbxl`, run `rojo serve`, and
 connect with the Rojo plugin. The baked map and lighting stay, because the project doesn't own
 those Workspace and Lighting children. `rojo build default.project.json` alone gives a
-code-only place, and the server builds the map at startup.
+code-only place, and the server builds the map at startup. The prototype works the same way
+with `dist/Prototype.rbxl` and `rojo serve prototype.project.json`.
 
 ### Sound
 
@@ -272,13 +333,18 @@ against the same scripts and the same baked place file:
 
 | Check | Result |
 |---|---|
-| `luau-lsp analyze` with Roblox type definitions over all of `src/` | 0 errors |
+| `luau-lsp analyze` with Roblox type definitions over `src/server`, `src/client` and `src/shared` | 0 errors |
 | Unit tests (economy, crates and odds, Orb Box, collect/sell, offline cap and once-only claim, upgrades, tutorial and detour guidance, profile validation and repair, lease locking with two servers including the audit's 12-second case, handoff, newer-version refusal, quarantine, finished-crate pickup) | 53 / 53 pass |
 | **Server playtest**: the real `Main.server.luau` in a Lune engine shim against `dist/JJKFarm.rbxl`, playing **Starter Crate -> Place -> Opening Time -> Open -> Place Sorcerer -> orbs fill the box -> Collect -> carry -> Sell -> Buy -> Upgrade** through the remotes. Also: touch pads, reinvesting (slots, pads, walk speed, Pick Up and re-place of a crate keeping its time, swaps, Sorcerer Upgrade, Pick Up), validation and rate limits, a second player who can't touch your farm, respawn at Your Farm, leave/save/release, offline progress paid once, a failed-load kick that leaves data untouched, malformed and newer saves refused untouched, a live lease on another server never taken, changes paused near lease expiry, release handoff, touch pads range- and alive-checked, and shutdown saves | 127 / 127 checks pass |
 | **Client smoke test**: the real client scripts with a stubbed engine. HUD (including on-screen menu bounds at seven screen sizes from portrait phone to 1440p), every prompt and its text, production (technique animations fire, orbs travel the lane, the box fill rises), crate timers, every panel and button, placement previews for Sorcerers and Crates, all effects, notifications, every tutorial step, the crate reveal through to Place, and hotkeys | 23 / 23 steps pass |
 | Economy pacing simulation (2-hour bot) | see *Pacing* |
 | Bake contract checks (6 farms x 10 slots x 4 pads, rings, locks, lane, Orb Box, Collect Pad, Sell Pad, crate displays, shop counters, spawn) | pass |
 | Map scale and composition | reviewed in aerial, plaza, gate, slot, pad, shop and Sell Stand previews with 5.2-stud avatar stand-ins |
+| Prototype: `luau-lsp analyze` over `src/prototype` | 0 errors |
+| Prototype unit tests: beat timing at real server-time magnitudes, combos, chest capacity and full-chest stop, never paying a beat twice, a frame-by-frame viewer seeing exactly the credited beats through stalls, offline vault, attribute round trip, R15 joints, strike fits the shortest beat, furthest reach exactly at contact and into the dummy's target, feet planted and level through the strike | 16 / 16 pass |
+| Prototype server: the real `Main.server.luau` in the engine shim against `dist/Prototype.rbxl`. Owner assignment, out-of-range and dead players refused, exact payout at the chest, empty chest, 5-minute cap, quiet pad collect, other players refused, both review switches (and only for the owner), handover when the owner leaves | 13 / 13 pass |
+| Prototype client: the real client scripts with a stubbed engine. Stance before the first wind-up, contact on the beat's timestamp, no replayed hit when the server clock steps back, payout popup, flash, sparks and sound, effects cleaned up, every credited beat shown through 0.9 s and 5 s stalls, chest display, resting while full, resuming after collect, recovery surviving a collect, a cancelled wind-up easing out (and its hit never landing), x3 combos | 13 / 13 pass |
+| Prototype look | strike rendered frame by frame from the real poses (GIF above), courtyard stills |
 
 The offline engine can't simulate physics, rendering, real input or networking. **Please do
 a manual pass in Studio** with `docs/PLAYTEST_CHECKLIST.md`.
@@ -290,7 +356,11 @@ a manual pass in Studio** with `docs/PLAYTEST_CHECKLIST.md`.
   Roblox domain, so I can't search or verify asset IDs. Characters and props are still
   primitives. The switch to Marketplace avatar items and Toolbox models is planned in
   `docs/NEXT_STEPS_PROPOSAL.md`.
-- **Technique animations move the whole Sorcerer** (lunge, sweep, rise, recoil) plus effects.
-  Limb animation would need uploaded animation assets or rigged models.
+- **In the main game, technique animations move the whole Sorcerer** (lunge, sweep, rise,
+  recoil) plus effects. The prototype has real jointed limb animation, which will replace it
+  once the prototype is approved.
+- **Prototype not run in Roblox Studio either.** Things the offline engine can't show:
+  whether Motor6D posing from a LocalScript looks smooth on the anchored rig, real sound
+  levels, Highlight and particle looks, and the chest prompt's feel.
 - **Audio is minimal** (see *Sound*).
 - Six farms per server. Set Max Players to 6.

@@ -1,7 +1,13 @@
 # JJK Farm: replacement plan for review
 
-Status: **proposal, not built.** Nothing below has been implemented yet. It covers the two
-things that need decisions before the next rebuild:
+Status: **section 2 is built as a prototype for review: `dist/Prototype.rbxl`** (Decision C,
+see the README's *Training-post prototype* and `docs/PROTOTYPE_REVIEW.md`). The open questions
+at the end were still unanswered, so the prototype uses these defaults: **A1** (collect at
+the farm), **B as proposed** (5 minutes of chest storage, offline vault 2 to 8 hours), and
+**code-driven joint animation** (no uploads). Say if you want any of them changed. Section 1
+(assets) is still blocked on network access to Roblox's catalog. Nothing in
+`dist/JJKFarm.rbxl` has changed. This document covers the two things that need decisions
+before the next rebuild:
 
 1. Replacing the orb conveyor (rejected), per the October 2 audit.
 2. Using **Marketplace / Toolbox assets** for characters and props instead of part-built
@@ -90,6 +96,9 @@ One compact anime training courtyard instead of six repeated farms on open grass
 I'll judge it from player-height screenshots in Studio, not overhead renders.
 
 ## Open questions for you
+
+Answers assumed by the prototype until you say otherwise: 1 still open (no IDs yet), 2 = A1,
+3 = yes, 4 = code-driven, 5 still open.
 
 1. **Network:** will you allow the Roblox domains above, or send asset IDs yourself?
 2. **Decision A:** collect at the farm (A1) or a selling trip (A2)?
