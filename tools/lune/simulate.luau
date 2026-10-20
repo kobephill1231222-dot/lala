@@ -21,7 +21,7 @@ local Crates, Sorcerers, Rarities, GameConfig, Upgrades =
 	req("Config/Upgrades")
 
 local minutes = tonumber(process.args[2]) or 120
-local SELL_TRIP = 22 -- seconds from Orb Box to Sell Stand and back
+local SELL_TRIP = 10 -- seconds from Orb Box to Sell Stand and back (about 75 studs each way at walk speed 20, plus the stops)
 local rng = Prng.new(7)
 local p = Schema.new(0)
 local t = 0

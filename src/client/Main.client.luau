@@ -17,6 +17,7 @@ local order = {
 	"StateController",
 	"CameraController",
 	"SoundController",
+	"WorldView",
 	"UIController",
 	"EffectsController",
 	"ProductionController",

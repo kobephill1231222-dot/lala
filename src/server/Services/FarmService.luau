@@ -1,8 +1,15 @@
 --!strict
--- Farm ownership and the farm's world representation: which farm belongs to whom, the
--- Sorcerers standing on production slots, Crates sitting on Crate Pads, lock states, the
--- owner's sign, the Orb Box numbers clients animate from, and the orb box a player carries.
--- Interaction prompts are created client-side; the server validates every request.
+-- Farm ownership and what each farm holds, published for every client to draw: which farm
+-- belongs to whom, the Sorcerers on its production slots, the Crates on its Crate Pads, how
+-- many slots and pads are unlocked, the Orb Box numbers clients animate from, and the orbs each
+-- player is carrying. Everything is data (attributes and Folders): the pixel client draws it.
+-- Interaction happens client-side; the server validates every request.
+--
+--   Workspace.JJKFarmMap.Farms.Farm<i>             OwnerId, OwnerName, Ops, CashRate, BoxOrbs,
+--                                                 BoxValue, BoxT, BoxCap, UnlockedSlots, UnlockedPads
+--     Runtime.Sorcerers.Sorcerer<slot> (Folder)   Uid, SorcererId, Level, Slot, Farm, Ops, OrbValue
+--     Runtime.Crates.Crate<pad> (Folder)          Cid, Tier, Pad, Farm, ReadyAt
+--   Player                                        CarriedOrbs, CarriedValue
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10,14 +17,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared.Config.GameConfig)
 local Layout = require(Shared.Config.FarmLayout)
-local Rarities = require(Shared.Config.Rarities)
 local Sorcerers = require(Shared.Config.Sorcerers)
 local Economy = require(Shared.Rules.Economy)
-local CharacterModels = require(Shared.Visuals.CharacterModels)
-local CrateModels = require(Shared.Visuals.CrateModels)
 
-type SlotView = { uid: string?, id: string?, level: number?, model: Model? }
-type PadView = { cid: string?, tier: string?, readyAt: number?, model: Model? }
+type SlotView = { uid: string?, id: string?, level: number?, item: Folder? }
+type PadView = { cid: string?, tier: string?, readyAt: number?, item: Folder? }
 
 type Farm = {
 	index: number,
@@ -35,11 +39,6 @@ local services: any
 local farms: { Farm } = {}
 local byPlayer: { [Player]: Farm } = {}
 
-local RING = {
-	Locked = Color3.fromRGB(70, 66, 76),
-	Empty = Color3.fromRGB(255, 214, 120),
-}
-
 local function mapFolder(): Instance
 	local map = workspace:FindFirstChild("JJKFarmMap")
 	assert(map, "JJKFarmMap missing; MapService.ensure() must run first")
@@ -52,44 +51,18 @@ local function child(parent: Instance, name: string): Instance
 	return found
 end
 
-local function setSign(farm: Farm)
-	local sign = farm.model:FindFirstChild("Sign")
-	local gui = sign and sign:FindFirstChild("SignGui")
-	local title = gui and gui:FindFirstChild("Title")
-	if title and title:IsA("TextLabel") then
-		title.Text = if farm.owner then farm.owner.DisplayName .. "'s Farm" else "Empty Farm"
-	end
-end
-
-local function makeLabel(parent: BasePart, height: number, lines: { { text: string, color: Color3 } })
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "Label"
-	gui.Size = UDim2.fromOffset(180, 22 * #lines)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, height + 1.2, 0)
-	gui.MaxDistance = 90
-	gui.LightInfluence = 0
-	gui.ResetOnSpawn = false
-	for i, line in lines do
-		local label = Instance.new("TextLabel")
-		label.Name = "Line" .. i
-		label.BackgroundTransparency = 1
-		label.Position = UDim2.fromScale(0, (i - 1) / #lines)
-		label.Size = UDim2.fromScale(1, 1 / #lines)
-		label.FontFace = Font.fromEnum(Enum.Font.FredokaOne)
-		label.TextScaled = true
-		label.Text = line.text
-		label.TextColor3 = line.color
-		label.TextStrokeTransparency = 0.25
-		label.Parent = gui
-	end
-	gui.Parent = parent
+local function folder(parent: Instance, name: string): Folder
+	local f = Instance.new("Folder")
+	f.Name = name
+	f.Parent = parent
+	return f
 end
 
 local function clearSlot(view: SlotView)
-	if view.model then
-		view.model:Destroy()
+	if view.item then
+		view.item:Destroy()
 	end
-	view.model, view.uid, view.id, view.level = nil, nil, nil, nil
+	view.item, view.uid, view.id, view.level = nil, nil, nil, nil
 end
 
 local function placeSorcerer(farm: Farm, slot: number, uid: string, unit: any, profile: any)
@@ -98,77 +71,43 @@ local function placeSorcerer(farm: Farm, slot: number, uid: string, unit: any, p
 		return
 	end
 	local view = farm.slots[slot]
-	local cf = Layout.slotWorld(farm.index, slot) * CFrame.new(0, 0.5, 0)
-	local model = CharacterModels.build(def.id, cf, { aura = true, scale = CharacterModels.FarmScale })
-	model.Name = "Sorcerer" .. slot
-	model:SetAttribute("Uid", uid)
-	model:SetAttribute("SorcererId", def.id)
-	model:SetAttribute("Level", unit.level)
-	model:SetAttribute("Slot", slot)
-	model:SetAttribute("Farm", farm.index)
-	model:SetAttribute("Ops", Economy.ops(unit))
-	model:SetAttribute("OrbValue", Economy.orbValue(unit, profile))
-	local rarity = Rarities.get(def.rarity)
-	if model.PrimaryPart then
-		makeLabel(model.PrimaryPart, CharacterModels.heightOf(def.id, CharacterModels.FarmScale), {
-			{
-				text = def.name .. "  Lv " .. unit.level,
-				color = if rarity then rarity.glow else Color3.new(1, 1, 1),
-			},
-			{ text = def.rarity, color = if rarity then rarity.color else Color3.new(1, 1, 1) },
-		})
-	end
-	model.Parent = farm.sorcerers
-	view.model, view.uid, view.id, view.level = model, uid, unit.id, unit.level
+	local item = Instance.new("Folder")
+	item.Name = "Sorcerer" .. slot
+	item:SetAttribute("Uid", uid)
+	item:SetAttribute("SorcererId", def.id)
+	item:SetAttribute("Level", unit.level)
+	item:SetAttribute("Slot", slot)
+	item:SetAttribute("Farm", farm.index)
+	item:SetAttribute("Ops", Economy.ops(unit))
+	item:SetAttribute("OrbValue", Economy.orbValue(unit, profile))
+	item.Parent = farm.sorcerers
+	view.item, view.uid, view.id, view.level = item, uid, unit.id, unit.level
 end
 
 local function clearPad(view: PadView)
-	if view.model then
-		view.model:Destroy()
+	if view.item then
+		view.item:Destroy()
 	end
-	view.model, view.cid, view.tier, view.readyAt = nil, nil, nil, nil
+	view.item, view.cid, view.tier, view.readyAt = nil, nil, nil, nil
 end
 
 local function placeCrate(farm: Farm, pad: number, cid: string, crate: any)
 	local view = farm.pads[pad]
-	local cf = Layout.padWorld(farm.index, pad) * CFrame.new(0, 0.6, 0)
-	local model = CrateModels.build(crate.tier, cf)
-	model.Name = "Crate" .. pad
-	model:SetAttribute("Cid", cid)
-	model:SetAttribute("Pad", pad)
-	model:SetAttribute("Farm", farm.index)
-	model:SetAttribute("ReadyAt", crate.readyAt)
-	model.Parent = farm.crates
-	view.model, view.cid, view.tier, view.readyAt = model, cid, crate.tier, crate.readyAt
-end
-
-local function setLocked(part: Instance?, locked: boolean)
-	if not part or not part:IsA("BasePart") then
-		return
-	end
-	part:SetAttribute("Locked", locked)
-	local ring = part:FindFirstChild("Ring")
-	if ring and ring:IsA("BasePart") then
-		ring.Color = if locked then RING.Locked else RING.Empty
-		ring.Material = if locked then Enum.Material.Slate else Enum.Material.Neon
-	end
-	local lock = part:FindFirstChild("Lock")
-	if lock and lock:IsA("BasePart") then
-		lock.Transparency = if locked then 0 else 1
-		for _, d in lock:GetDescendants() do
-			if d:IsA("BasePart") then
-				d.Transparency = if locked then 0 else 1
-			end
-		end
-	end
+	local item = Instance.new("Folder")
+	item.Name = "Crate" .. pad
+	item:SetAttribute("Cid", cid)
+	item:SetAttribute("Tier", crate.tier)
+	item:SetAttribute("Pad", pad)
+	item:SetAttribute("Farm", farm.index)
+	item:SetAttribute("ReadyAt", crate.readyAt)
+	item.Parent = farm.crates
+	view.item, view.cid, view.tier, view.readyAt = item, cid, crate.tier, crate.readyAt
 end
 
 -- Full sync of one farm with its owner's profile. Only rebuilds what changed.
 local function renderFarm(farm: Farm)
 	local session = farm.owner and services.DataService.peekSession(farm.owner)
 	local profile = session and session.profile
-	local slotsFolder = farm.model:FindFirstChild("Slots")
-	local padsFolder = farm.model:FindFirstChild("Pads")
 	local unlockedSlots = if profile then Economy.unlockedSlots(profile) else 0
 	local unlockedPads = if profile then Economy.unlockedPads(profile) else 0
 
@@ -181,10 +120,9 @@ local function renderFarm(farm: Farm)
 		elseif view.uid ~= uid or view.id ~= unit.id or view.level ~= unit.level then
 			clearSlot(view)
 			placeSorcerer(farm, slot, uid, unit, profile)
-		elseif view.model then
-			view.model:SetAttribute("OrbValue", Economy.orbValue(unit, profile))
+		elseif view.item then
+			view.item:SetAttribute("OrbValue", Economy.orbValue(unit, profile))
 		end
-		setLocked(slotsFolder and slotsFolder:FindFirstChild("Slot" .. slot), slot > unlockedSlots)
 	end
 
 	local onPad: { [number]: { cid: string, crate: any } } = {}
@@ -204,103 +142,20 @@ local function renderFarm(farm: Farm)
 			clearPad(view)
 			placeCrate(farm, pad, entry.cid, entry.crate)
 		end
-		setLocked(padsFolder and padsFolder:FindFirstChild("Pad" .. pad), pad > unlockedPads)
 	end
 	farm.model:SetAttribute("UnlockedSlots", unlockedSlots)
 	farm.model:SetAttribute("UnlockedPads", unlockedPads)
 end
 
--- The carried Orb Box: a glowing chest the player holds in front of them until they Sell.
--- It is welded to the character, so it is only ever positioned before the weld exists; a
--- change of size rebuilds it instead of moving a welded part (which would drag the player).
-local function buildCarriedBox(root: BasePart, size: number): BasePart
-	local cf = root.CFrame * CFrame.new(0, 0.3, -(1.1 + size / 2))
-	local part = Instance.new("Part")
-	part.Name = "CarriedOrbBox"
-	part.Material = Enum.Material.WoodPlanks
-	part.Color = Color3.fromRGB(110, 78, 54)
-	part.Size = Vector3.new(size, size * 0.8, size)
-	part.CFrame = cf
-	part.CanCollide = false
-	part.CanQuery = false
-	part.CanTouch = false
-	part.Massless = true
-	part.CastShadow = false
-	part:SetAttribute("SizeKey", size)
-	local glow = Instance.new("Part")
-	glow.Name = "Glow"
-	glow.Material = Enum.Material.Neon
-	glow.Color = Color3.fromRGB(190, 110, 255)
-	glow.Size = Vector3.new(size * 0.8, 0.2, size * 0.8)
-	glow.CFrame = cf * CFrame.new(0, size * 0.4 + 0.05, 0)
-	glow.CanCollide = false
-	glow.CanQuery = false
-	glow.CanTouch = false
-	glow.Massless = true
-	glow.CastShadow = false
-	glow.Parent = part
-	local light = Instance.new("PointLight")
-	light.Color = Color3.fromRGB(190, 110, 255)
-	light.Range = 8
-	light.Brightness = 1.5
-	light.Parent = glow
-	local glowWeld = Instance.new("WeldConstraint")
-	glowWeld.Part0 = part
-	glowWeld.Part1 = glow
-	glowWeld.Parent = glow
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "Count"
-	gui.Size = UDim2.fromOffset(150, 26)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 2.2, 0)
-	gui.MaxDistance = 80
-	gui.LightInfluence = 0
-	gui.AlwaysOnTop = true
-	local label = Instance.new("TextLabel")
-	label.Name = "Text"
-	label.BackgroundTransparency = 1
-	label.Size = UDim2.fromScale(1, 1)
-	label.FontFace = Font.fromEnum(Enum.Font.FredokaOne)
-	label.TextScaled = true
-	label.TextColor3 = Color3.fromRGB(240, 220, 255)
-	label.TextStrokeTransparency = 0.2
-	label.Parent = gui
-	gui.Parent = part
-	local weld = Instance.new("WeldConstraint")
-	weld.Name = "Weld"
-	weld.Part0 = root
-	weld.Part1 = part
-	weld.Parent = part
-	return part
-end
-
+-- What a player carries (drawn by every client above that player).
 local function updateCarried(player: Player, orbs: number, value: number)
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not character or not root or not root:IsA("BasePart") then
-		return
+	local whole = math.floor(orbs)
+	if player:GetAttribute("CarriedOrbs") ~= whole then
+		player:SetAttribute("CarriedOrbs", whole)
 	end
-	local existing = character:FindFirstChild("CarriedOrbBox")
-	if orbs < 1 then
-		if existing then
-			existing:Destroy()
-		end
-		return
+	if player:GetAttribute("CarriedValue") ~= value then
+		player:SetAttribute("CarriedValue", value)
 	end
-	-- Grows with what you carry, in steps so it isn't rebuilt on every orb.
-	local size = 1.6 + math.floor(math.min(1.4, math.log10(orbs) * 0.45) * 5 + 0.5) / 5
-	if existing and existing:GetAttribute("SizeKey") ~= size then
-		existing:Destroy()
-		existing = nil
-	end
-	local box: Instance = existing or buildCarriedBox(root, size)
-	box.Parent = character
-	local gui = box:FindFirstChild("Count")
-	local label = gui and gui:FindFirstChild("Text")
-	if label and label:IsA("TextLabel") then
-		label.Text = string.format("%d Cursed Orbs", orbs)
-	end
-	box:SetAttribute("Orbs", orbs)
-	box:SetAttribute("Value", value)
 end
 
 ---------------------------------------------------------------------------------------
@@ -330,7 +185,6 @@ function FarmService.assign(player: Player): number?
 			byPlayer[player] = farm
 			farm.model:SetAttribute("OwnerId", player.UserId)
 			farm.model:SetAttribute("OwnerName", player.DisplayName)
-			setSign(farm)
 			return farm.index
 		end
 	end
@@ -353,7 +207,6 @@ function FarmService.release(player: Player)
 	for _, name in { "OwnerId", "OwnerName", "Ops", "BoxOrbs", "BoxValue", "BoxT", "BoxCap" } do
 		farm.model:SetAttribute(name, nil)
 	end
-	setSign(farm)
 	renderFarm(farm)
 end
 
@@ -364,7 +217,7 @@ function FarmService.render(player: Player)
 	end
 end
 
--- Cheap per-state-change update: Orb Box numbers and the carried box.
+-- Cheap per-state-change update: Orb Box numbers and what the player carries.
 function FarmService.sync(player: Player)
 	local session = services.DataService.peekSession(player)
 	if not session then
@@ -426,28 +279,20 @@ function FarmService.init(registry: any)
 end
 
 function FarmService.start()
-	local folder = child(mapFolder(), "Farms")
+	local farmsFolder = child(mapFolder(), "Farms")
 	for index = 1, Layout.FarmCount do
-		local model = child(folder, "Farm" .. index) :: Model
+		local model = child(farmsFolder, "Farm" .. index) :: Model
 		local runtime = model:FindFirstChild("Runtime")
 		if runtime then
 			runtime:Destroy()
 		end
-		local newRuntime = Instance.new("Folder")
-		newRuntime.Name = "Runtime"
-		newRuntime.Parent = model
-		local sorcerers = Instance.new("Folder")
-		sorcerers.Name = "Sorcerers"
-		sorcerers.Parent = newRuntime
-		local crates = Instance.new("Folder")
-		crates.Name = "Crates"
-		crates.Parent = newRuntime
+		local newRuntime = folder(model, "Runtime")
 		local farm: Farm = {
 			index = index,
 			model = model,
 			owner = nil,
-			sorcerers = sorcerers,
-			crates = crates,
+			sorcerers = folder(newRuntime, "Sorcerers"),
+			crates = folder(newRuntime, "Crates"),
 			slots = {},
 			pads = {},
 		}
@@ -458,7 +303,6 @@ function FarmService.start()
 			farm.pads[pad] = {}
 		end
 		farms[index] = farm
-		setSign(farm)
 		renderFarm(farm)
 	end
 

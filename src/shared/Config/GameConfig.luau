@@ -29,10 +29,11 @@ GameConfig.OpenSpeedPerLevel = 0.06
 GameConfig.BaseWalkSpeed = 20
 GameConfig.WalkSpeedPerLevel = 2
 
--- Interaction ranges (studs), checked on the server
-GameConfig.CollectRange = 22
-GameConfig.SellRange = 26
-GameConfig.ShopRange = 40
+-- Interaction ranges (studs, flat distance), checked on the server. The world is a compact
+-- grid of 4-stud tiles (FarmLayout), so these are a few tiles around each spot.
+GameConfig.CollectRange = 14
+GameConfig.SellRange = 12
+GameConfig.ShopRange = 20
 
 -- Persistence
 -- The session lock is a lease: every save renews it, and another server may only take a

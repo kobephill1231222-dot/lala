@@ -1,48 +1,45 @@
 --!strict
--- Top-down camera (Shared/Visuals/TopDownCamera). Once your farm is known, the view turns so
--- Your Farm sits upright on screen: its back at the top, its entrance and the plaza below.
+-- The 3D camera only exists so Roblox's default controls move your (invisible) character the
+-- way the pixel screen suggests: it hangs above the character looking down, with north at the
+-- top, so W walks up the screen, S down, A left and D right (thumbstick and gamepad too).
+-- Nothing 3D is ever seen: the pixel world (WorldView) covers the screen.
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Layout = require(Shared.Config.FarmLayout)
-local TopDownCamera = require(Shared.Visuals.TopDownCamera)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local CameraController = {}
 
-local registry: any
-local orientedFarm: number? = nil
+CameraController.Height = 60
+CameraController.Tilt = 6 -- studs south of straight-down, so "forward" is clearly north
 
--- Screen-up for a farm: from its entrance toward its back (away from the plaza).
-function CameraController.yawFor(farm: number): number
-	return TopDownCamera.yawFacing(-Layout.farmCFrame(farm).LookVector)
+-- Camera CFrame for a character at `position`.
+function CameraController.frameFor(position: Vector3): CFrame
+	local eye = position + Vector3.new(0, CameraController.Height, CameraController.Tilt)
+	return CFrame.lookAt(eye, position, Vector3.new(0, 0, -1))
 end
 
-local function orient()
-	local farm = registry.StateController.farm()
-	if farm and farm ~= orientedFarm then
-		-- Snap on the first assignment (you spawn there); ease on any later change.
-		TopDownCamera.setYaw(CameraController.yawFor(farm), orientedFarm == nil)
-		orientedFarm = farm
+local function step()
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	if camera.CameraType ~= Enum.CameraType.Scriptable then
+		camera.CameraType = Enum.CameraType.Scriptable
+	end
+	local character = Players.LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		local position = root.CFrame.Position
+		camera.CFrame = CameraController.frameFor(position)
+		camera.Focus = CFrame.new(position)
 	end
 end
+CameraController.step = step
 
-function CameraController.init(r: any)
-	registry = r
-end
-
--- Tall gameplay objects stay solid: the Orb Box, the Crate Shop's display crates, and
--- everything the server places at runtime (Sorcerers and Crates on farms).
-function CameraController.keep(part: BasePart): boolean
-	return part:FindFirstAncestor("OrbBox") ~= nil
-		or part:FindFirstAncestor("Displays") ~= nil
-		or part:FindFirstAncestor("Runtime") ~= nil
-end
+function CameraController.init(_registry: any) end
 
 function CameraController.start()
-	TopDownCamera.start({ workspace:WaitForChild("JJKFarmMap") }, CameraController.keep)
-	orient()
-	registry.StateController.Changed:Connect(orient)
+	RunService:BindToRenderStep("JJKCamera", Enum.RenderPriority.Camera.Value + 1, step)
 end
 
 return CameraController

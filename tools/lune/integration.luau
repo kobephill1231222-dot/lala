@@ -109,24 +109,14 @@ local function scenario()
 		profile and next(profile.units) == nil and profile.cash == 0
 	)
 	check("farm shows its owner", farm1:GetAttribute("OwnerId") == 1001)
-	check(
-		"sign reads Alice's Farm",
-		farm1.Sign.SignGui.Title.Text == "Alice's Farm",
-		farm1.Sign.SignGui.Title.Text
-	)
+	check("farm shows its owner's name", farm1:GetAttribute("OwnerName") == "Alice", farm1:GetAttribute("OwnerName"))
 	check(
 		"spawned at Your Farm",
 		(rootPos(alice) - Layout.homeCFrame(1).Position).Magnitude < 1,
 		(rootPos(alice) - Layout.homeCFrame(1).Position).Magnitude
 	)
-	check(
-		"slot 3 open, slot 4 locked",
-		farm1.Slots.Slot3:GetAttribute("Locked") == false and farm1.Slots.Slot4:GetAttribute("Locked") == true
-	)
-	check(
-		"pad 2 open, pad 3 locked",
-		farm1.Pads.Pad2:GetAttribute("Locked") == false and farm1.Pads.Pad3:GetAttribute("Locked") == true
-	)
+	check("slots 1-3 open, slot 4 locked", farm1:GetAttribute("UnlockedSlots") == 3, farm1:GetAttribute("UnlockedSlots"))
+	check("pads 1-2 open, pad 3 locked", farm1:GetAttribute("UnlockedPads") == 2, farm1:GetAttribute("UnlockedPads"))
 	check(
 		"leaderstats show Cash",
 		alice:FindFirstChild("leaderstats") and alice.leaderstats.Cash.Value == "$0"
@@ -140,7 +130,7 @@ local function scenario()
 		away.ok == false and away.message == "Go to Your Farm first.",
 		away.message
 	)
-	teleport(alice, farmPoint(1, V3(-30, 0, -40)))
+	teleport(alice, farmPoint(1, V3(-16, 0, -20)))
 	check("locked pad refused", request(alice, "PlaceCrate", { cid = "1", pad = 3 }).ok == false)
 	check("bad pad refused", request(alice, "PlaceCrate", { cid = "1", pad = "1" }).ok == false)
 	local placed = request(alice, "PlaceCrate", { cid = "1", pad = 1 })
@@ -188,12 +178,8 @@ local function scenario()
 	check("Kai placed on slot 1", put.ok, put.message)
 	settle(0.2)
 	local kaiModel = farm1.Runtime.Sorcerers:FindFirstChild("Sorcerer1")
-	check("Sorcerer model stands on slot 1", kaiModel ~= nil and kaiModel:GetAttribute("SorcererId") == "kai")
-	check(
-		"model is avatar-plus sized",
-		kaiModel and kaiModel:GetAttribute("Height") > 6,
-		kaiModel and kaiModel:GetAttribute("Height")
-	)
+	check("Sorcerer stands on slot 1", kaiModel ~= nil and kaiModel:GetAttribute("SorcererId") == "kai")
+	check("its level and slot are published", kaiModel and kaiModel:GetAttribute("Level") == 1 and kaiModel:GetAttribute("Slot") == 1)
 	check("farm reports 1 Orb per Second", farm1:GetAttribute("Ops") == 1, farm1:GetAttribute("Ops"))
 	check("tutorial at step 4", lastProfile(alice).tutorial == 4)
 
@@ -215,7 +201,7 @@ local function scenario()
 		"carrying 20 orbs worth $40",
 		profile.carried.orbs == 20 and math.abs(profile.carried.value - 40) < 1e-6
 	)
-	check("carried Orb Box visible on the character", alice.Character:FindFirstChild("CarriedOrbBox") ~= nil)
+	check("carried orbs published for everyone to see", alice:GetAttribute("CarriedOrbs") == 20, alice:GetAttribute("CarriedOrbs"))
 	check("Orb Box emptied", profile.box.orbs < 1)
 	check("tutorial at step 5", profile.tutorial == 5)
 
@@ -228,7 +214,7 @@ local function scenario()
 	settle(0.2)
 	profile = lastProfile(alice)
 	check("Cash = 40 + $50 tutorial reward", profile.cash == 90, profile.cash)
-	check("carried box gone", alice.Character:FindFirstChild("CarriedOrbBox") == nil)
+	check("carried orbs gone", alice:GetAttribute("CarriedOrbs") == 0)
 	check("leaderstats updated", alice.leaderstats.Cash.Value == "$90", alice.leaderstats.Cash.Value)
 	check("tutorial at step 6", profile.tutorial == 6)
 
@@ -299,9 +285,9 @@ local function scenario()
 	)
 	check("unknown upgrade refused", request(alice, "BuyUpgrade", { id = "teleport" }).ok == false)
 	settle(0.2)
-	check("slot 4 unlocked", farm1.Slots.Slot4:GetAttribute("Locked") == false)
-	check("pad 3 unlocked", farm1.Pads.Pad3:GetAttribute("Locked") == false)
-	teleport(alice, farmPoint(1, V3(-30, 0, -20)))
+	check("slot 4 unlocked", farm1:GetAttribute("UnlockedSlots") == 4)
+	check("pad 3 unlocked", farm1:GetAttribute("UnlockedPads") == 3)
+	teleport(alice, farmPoint(1, V3(-16, 0, -12)))
 	local p2 = request(alice, "PlaceCrate", { cid = basicCid, pad = 3 })
 	check("Basic Crate placed on pad 3", p2.ok, p2.message)
 	state.now += 5
@@ -382,11 +368,11 @@ local function scenario()
 	state.now += 30
 	local cashBefore = DataService.getSession(alice).profile.cash
 	-- Leave a crate opening on a pad so its timestamp has to survive the trip.
-	teleport(alice, farmPoint(1, V3(-30, 0, -40)))
+	teleport(alice, farmPoint(1, V3(-16, 0, -20)))
 	grant(alice, 60)
 	teleport(alice, Layout.CrateShop + V3(0, 0, 12))
 	local third = request(alice, "BuyCrate", { tier = "basic" })
-	teleport(alice, farmPoint(1, V3(-30, 0, -40)))
+	teleport(alice, farmPoint(1, V3(-16, 0, -20)))
 	request(alice, "PlaceCrate", { cid = third.data.cid, pad = 1 })
 	local readyAt = DataService.getSession(alice).profile.crates[third.data.cid].readyAt
 	EngineShim.removePlayer(game, alice)
@@ -406,7 +392,7 @@ local function scenario()
 	check("Orb Box settled at save time", record.data.box.t == state.now, record.data.box.t)
 	check(
 		"farm released",
-		farm1:GetAttribute("OwnerId") == nil and farm1.Sign.SignGui.Title.Text == "Empty Farm"
+		farm1:GetAttribute("OwnerId") == nil and farm1:GetAttribute("OwnerName") == nil
 	)
 	check("sorcerers cleared from the released farm", #farm1.Runtime.Sorcerers:GetChildren() == 0)
 	check("crates cleared from the released farm", #farm1.Runtime.Crates:GetChildren() == 0)
@@ -439,7 +425,7 @@ local function scenario()
 	check(
 		"crate that finished offline can be opened",
 		(function()
-			teleport(alice2, farmPoint(1, V3(-30, 0, -40)))
+			teleport(alice2, farmPoint(1, V3(-16, 0, -20)))
 			return request(alice2, "OpenCrate", { pad = 1 }).ok
 		end)()
 	)
