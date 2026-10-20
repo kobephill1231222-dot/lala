@@ -5,3 +5,5 @@ roblox.yml
 *.rbxl.lock
 *.rbxlx.lock
 .DS_Store
+# Throwaway client runners used while developing
+/tools/lune/_*.luau
