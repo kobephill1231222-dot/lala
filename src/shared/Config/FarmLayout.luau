@@ -38,7 +38,8 @@ Layout.FloorHeight = 0 -- farms sit on the ground (the world is flat)
 function Layout.farmCFrame(index: number): CFrame
 	local column = (index - 1) % 3 + 1
 	local north = index <= 3
-	local center = Vector3.new(Layout.FarmColumns[column], 0, if north then -Layout.FarmRowZ else Layout.FarmRowZ)
+	local center =
+		Vector3.new(Layout.FarmColumns[column], 0, if north then -Layout.FarmRowZ else Layout.FarmRowZ)
 	-- LookVector (local -Z) faces the plaza: the farm's front. Axis-aligned, so pixel art
 	-- never has to be drawn at an angle.
 	return if north then CFrame.new(center) * CFrame.Angles(0, math.pi, 0) else CFrame.new(center)

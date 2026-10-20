@@ -102,9 +102,12 @@ local function visit(node, parentAbs, clip, out, k)
 	local children = {}
 	for i, child in node:GetChildren() do
 		if child:IsA("GuiObject") then
-			table.insert(children, { child = child, z = safe(function()
-				return child.ZIndex
-			end, 1), i = i })
+			table.insert(
+				children,
+				{ child = child, z = safe(function()
+					return child.ZIndex
+				end, 1), i = i }
+			)
 		end
 	end
 	table.sort(children, function(a, b)

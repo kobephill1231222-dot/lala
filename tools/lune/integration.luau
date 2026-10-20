@@ -109,14 +109,26 @@ local function scenario()
 		profile and next(profile.units) == nil and profile.cash == 0
 	)
 	check("farm shows its owner", farm1:GetAttribute("OwnerId") == 1001)
-	check("farm shows its owner's name", farm1:GetAttribute("OwnerName") == "Alice", farm1:GetAttribute("OwnerName"))
+	check(
+		"farm shows its owner's name",
+		farm1:GetAttribute("OwnerName") == "Alice",
+		farm1:GetAttribute("OwnerName")
+	)
 	check(
 		"spawned at Your Farm",
 		(rootPos(alice) - Layout.homeCFrame(1).Position).Magnitude < 1,
 		(rootPos(alice) - Layout.homeCFrame(1).Position).Magnitude
 	)
-	check("slots 1-3 open, slot 4 locked", farm1:GetAttribute("UnlockedSlots") == 3, farm1:GetAttribute("UnlockedSlots"))
-	check("pads 1-2 open, pad 3 locked", farm1:GetAttribute("UnlockedPads") == 2, farm1:GetAttribute("UnlockedPads"))
+	check(
+		"slots 1-3 open, slot 4 locked",
+		farm1:GetAttribute("UnlockedSlots") == 3,
+		farm1:GetAttribute("UnlockedSlots")
+	)
+	check(
+		"pads 1-2 open, pad 3 locked",
+		farm1:GetAttribute("UnlockedPads") == 2,
+		farm1:GetAttribute("UnlockedPads")
+	)
 	check(
 		"leaderstats show Cash",
 		alice:FindFirstChild("leaderstats") and alice.leaderstats.Cash.Value == "$0"
@@ -179,7 +191,10 @@ local function scenario()
 	settle(0.2)
 	local kaiModel = farm1.Runtime.Sorcerers:FindFirstChild("Sorcerer1")
 	check("Sorcerer stands on slot 1", kaiModel ~= nil and kaiModel:GetAttribute("SorcererId") == "kai")
-	check("its level and slot are published", kaiModel and kaiModel:GetAttribute("Level") == 1 and kaiModel:GetAttribute("Slot") == 1)
+	check(
+		"its level and slot are published",
+		kaiModel and kaiModel:GetAttribute("Level") == 1 and kaiModel:GetAttribute("Slot") == 1
+	)
 	check("farm reports 1 Orb per Second", farm1:GetAttribute("Ops") == 1, farm1:GetAttribute("Ops"))
 	check("tutorial at step 4", lastProfile(alice).tutorial == 4)
 
@@ -201,7 +216,11 @@ local function scenario()
 		"carrying 20 orbs worth $40",
 		profile.carried.orbs == 20 and math.abs(profile.carried.value - 40) < 1e-6
 	)
-	check("carried orbs published for everyone to see", alice:GetAttribute("CarriedOrbs") == 20, alice:GetAttribute("CarriedOrbs"))
+	check(
+		"carried orbs published for everyone to see",
+		alice:GetAttribute("CarriedOrbs") == 20,
+		alice:GetAttribute("CarriedOrbs")
+	)
 	check("Orb Box emptied", profile.box.orbs < 1)
 	check("tutorial at step 5", profile.tutorial == 5)
 
@@ -390,10 +409,7 @@ local function scenario()
 		record.data.crates[third.data.cid].pad == 1 and record.data.crates[third.data.cid].readyAt == readyAt
 	)
 	check("Orb Box settled at save time", record.data.box.t == state.now, record.data.box.t)
-	check(
-		"farm released",
-		farm1:GetAttribute("OwnerId") == nil and farm1:GetAttribute("OwnerName") == nil
-	)
+	check("farm released", farm1:GetAttribute("OwnerId") == nil and farm1:GetAttribute("OwnerName") == nil)
 	check("sorcerers cleared from the released farm", #farm1.Runtime.Sorcerers:GetChildren() == 0)
 	check("crates cleared from the released farm", #farm1.Runtime.Crates:GetChildren() == 0)
 

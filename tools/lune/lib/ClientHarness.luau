@@ -174,7 +174,8 @@ function ClientHarness.new(placePath, options)
 	local game = Sandbox.loadPlace(placePath)
 	self.game = game
 	-- Stand-in art for any Art module that doesn't exist yet (while the art is being drawn).
-	local stubDir = options.stubArt or "/tmp/claude-0/-home-user-lala/1f2f6715-7022-544d-949c-f1301017a1f7/scratchpad/stub/"
+	local stubDir = options.stubArt
+		or "/tmp/claude-0/-home-user-lala/1f2f6715-7022-544d-949c-f1301017a1f7/scratchpad/stub/"
 	local pixel = game:GetService("ReplicatedStorage").Shared:FindFirstChild("Pixel")
 	if pixel and fs.isDir(stubDir) then
 		local art = pixel:FindFirstChild("Art")
@@ -256,7 +257,9 @@ function ClientHarness.new(placePath, options)
 	local remotesFolder = roblox.Instance.new("Folder")
 	remotesFolder.Name = Net.FolderName
 	remotesFolder.Parent = game:GetService("ReplicatedStorage")
-	for name, className in { Request = "RemoteFunction", State = "RemoteEvent", Notify = "RemoteEvent", Effect = "RemoteEvent" } do
+	for name, className in
+		{ Request = "RemoteFunction", State = "RemoteEvent", Notify = "RemoteEvent", Effect = "RemoteEvent" }
+	do
 		local remote = roblox.Instance.new(className)
 		remote.Name = name
 		remote.Parent = remotesFolder
@@ -403,7 +406,11 @@ function ClientHarness:boot()
 end
 
 function ClientHarness:key(name, ended)
-	local input = { KeyCode = roblox.Enum.KeyCode[name], UserInputType = roblox.Enum.UserInputType.Keyboard, UserInputState = roblox.Enum.UserInputState.Begin }
+	local input = {
+		KeyCode = roblox.Enum.KeyCode[name],
+		UserInputType = roblox.Enum.UserInputType.Keyboard,
+		UserInputState = roblox.Enum.UserInputState.Begin,
+	}
 	self.uis.InputBegan:FireSync(input, false)
 	if ended ~= false then
 		self.uis.InputEnded:FireSync(input, false)

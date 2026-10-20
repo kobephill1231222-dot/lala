@@ -54,14 +54,15 @@ function Sprite.merge(rows: { string }): { Rect }
 			end
 			if not TRANSPARENT[c] then
 				local key = x .. ":" .. (stop - x + 1) .. ":" .. c
-				local rect = open[key]
-				if rect then
-					rect.h += 1
+				local grow = open[key]
+				if grow then
+					grow.h += 1
+					nextOpen[key] = grow
 				else
-					rect = { x = x - 1, y = y - 1, w = stop - x + 1, h = 1, key = c }
+					local rect: Rect = { x = x - 1, y = y - 1, w = stop - x + 1, h = 1, key = c }
 					table.insert(out, rect)
+					nextOpen[key] = rect
 				end
-				nextOpen[key] = rect
 			end
 			x = stop + 1
 		end
@@ -80,12 +81,28 @@ function Sprite.define(spec: Spec): Def
 	end
 	local rects = {}
 	for i, frame in spec.frames do
-		assert(#frame == h, string.format("%s frame %d has %d rows, expected %d", spec.name or "sprite", i, #frame, h))
+		assert(
+			#frame == h,
+			string.format("%s frame %d has %d rows, expected %d", spec.name or "sprite", i, #frame, h)
+		)
 		for r, row in frame do
-			assert(#row == w, string.format("%s frame %d row %d is %d wide, expected %d", spec.name or "sprite", i, r, #row, w))
+			assert(
+				#row == w,
+				string.format(
+					"%s frame %d row %d is %d wide, expected %d",
+					spec.name or "sprite",
+					i,
+					r,
+					#row,
+					w
+				)
+			)
 			for c = 1, #row do
 				local ch = string.sub(row, c, c)
-				assert(TRANSPARENT[ch] or spec.palette[ch], string.format("%s: colour '%s' not in palette", spec.name or "sprite", ch))
+				assert(
+					TRANSPARENT[ch] or spec.palette[ch],
+					string.format("%s: colour '%s' not in palette", spec.name or "sprite", ch)
+				)
 			end
 		end
 		rects[i] = Sprite.merge(frame)
@@ -155,7 +172,8 @@ end
 -- Puts a built sprite so its anchor pixel lands on screen point (x, y) (whole pixels).
 function Sprite.place(holder: Frame, def: Def, x: number, y: number, scale: number, flip: boolean?)
 	local ax = if flip then def.w - def.anchor[1] else def.anchor[1]
-	holder.Position = UDim2.fromOffset(math.floor(x - ax * scale + 0.5), math.floor(y - def.anchor[2] * scale + 0.5))
+	holder.Position =
+		UDim2.fromOffset(math.floor(x - ax * scale + 0.5), math.floor(y - def.anchor[2] * scale + 0.5))
 end
 
 -- Builds every animation frame of a sprite once, as sibling holders ("F1", "F2", ...) inside

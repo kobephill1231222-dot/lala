@@ -29,6 +29,9 @@ local StaticWorld = require(Pixel.StaticWorld)
 
 local WorldView = {}
 
+-- Name board text rows (art px from the board's top): one centred line, or two lines.
+local SIGN_ONE_LINE, SIGN_LINE_1, SIGN_LINE_2 = 6, 2, 10
+
 export type SlotView = { frame: Frame, state: string, x: number, y: number, size: number }
 export type FarmView = {
 	index: number,
@@ -42,7 +45,8 @@ export type FarmView = {
 	slats: Frame, -- scrolling slat strip inside the lane (ProductionController moves it)
 	boxFill: Frame, -- the Orb Box's contents (ProductionController sizes and colours it)
 	boxInterior: { x: number, y: number, w: number, h: number },
-	sign: Frame, -- Text holder on the farm's name board
+	sign: Frame, -- Text holder on the farm's name board (first line)
+	signSub: Frame, -- second line ("'S FARM"), shown for other players' farms
 	sorcerers: { [number]: Actor.Actor }, -- by slot
 	sorcererIds: { [number]: string },
 	crates: { [number]: Actor.Actor }, -- by pad
@@ -96,7 +100,16 @@ end
 
 -- Farm fittings ----------------------------------------------------------------------------
 
-local function canvasFrame(parent: Instance, name: string, canvas: Canvas.Canvas, x: number, y: number, w: number, h: number, z: number?): Frame
+local function canvasFrame(
+	parent: Instance,
+	name: string,
+	canvas: Canvas.Canvas,
+	x: number,
+	y: number,
+	w: number,
+	h: number,
+	z: number?
+): Frame
 	local f = Instance.new("Frame")
 	f.Name = name
 	f.BackgroundTransparency = 1
@@ -211,17 +224,19 @@ local function buildFarm(info: WorldMap.FarmInfo): FarmView
 	World.collectPad(collectCanvas, cx, cy, cw, ch)
 	canvasFrame(group, "CollectPad", collectCanvas, cx, cy, cw, ch, 1)
 
-	-- Name board beside the gate (outside the fence, on the road side)
-	local gx, gy = Camera2D.toArt(info.gate)
-	local signW, signH = 72, 12
-	local sy = if info.north then fy + fh + 2 else fy - signH - 2
-	local sx = gx + 12
+	-- Name board just inside the front fence (WorldMap places it)
+	local sx, sy, signW, signH = StaticWorld.artRect(info.sign)
 	local signCanvas = Canvas.new()
 	World.sign(signCanvas, sx, sy, signW, signH)
 	local sign = canvasFrame(group, "Sign", signCanvas, sx, sy, signW, signH, 4)
+	-- "YOUR FARM" / "EMPTY FARM" on one line, or "<NAME>" over "'S FARM"
 	local text = Text.centered(sign, "EMPTY FARM", signW - 4, { color = Palette.Cream, zindex = 5 })
-	text.Position = UDim2.fromOffset(2, 2)
+	text.Position = UDim2.fromOffset(2, SIGN_ONE_LINE)
 	text.Name = "Title"
+	local sub = Text.centered(sign, "'S FARM", signW - 4, { color = Palette.Cream, zindex = 5 })
+	sub.Position = UDim2.fromOffset(2, SIGN_LINE_2)
+	sub.Name = "Sub"
+	sub.Visible = false
 
 	local view: FarmView = {
 		index = info.index,
@@ -236,6 +251,7 @@ local function buildFarm(info: WorldMap.FarmInfo): FarmView
 		boxFill = fill,
 		boxInterior = { x = ix, y = iy, w = iw, h = ih },
 		sign = text,
+		signSub = sub,
 		sorcerers = {},
 		sorcererIds = {},
 		crates = {},
@@ -277,13 +293,20 @@ local function reconcileFarm(farm: FarmView)
 	for pad, view in farm.pads do
 		drawSlot(farm, view, "pad", if owned and pad <= unlockedPads then "open" else "locked")
 	end
+	-- Same words as the 3D gate sign: "Your Farm", "<DisplayName>'s Farm", "Empty Farm".
 	local mine = attr(model, "OwnerId") == Players.LocalPlayer.UserId
 	local owner = attr(model, "OwnerName")
+	local named = not mine and type(owner) == "string"
 	Text.set(
 		farm.sign,
-		if mine then "YOUR FARM" elseif type(owner) == "string" then string.upper(string.sub(owner, 1, 9)) else "EMPTY FARM",
+		if mine
+			then "YOUR FARM"
+			elseif named then string.upper(string.sub(owner :: string, 1, 10))
+			else "EMPTY FARM",
 		if mine then Palette.Yellow else Palette.Cream
 	)
+	farm.sign.Position = UDim2.fromOffset(2, if named then SIGN_LINE_1 else SIGN_ONE_LINE)
+	farm.signSub.Visible = named
 
 	-- Sorcerers
 	local runtime = model and model:FindFirstChild("Runtime")
@@ -389,7 +412,16 @@ end
 
 -- Players ----------------------------------------------------------------------------------
 
-local SHIRTS = { Palette.Sky, Palette.Red, Palette.Leaf, Palette.Orange, Palette.Orchid, Palette.Cyan, Palette.Amber, Palette.Rose }
+local SHIRTS = {
+	Palette.Sky,
+	Palette.Red,
+	Palette.Leaf,
+	Palette.Orange,
+	Palette.Orchid,
+	Palette.Cyan,
+	Palette.Amber,
+	Palette.Rose,
+}
 
 local function colorsFor(player: Player): { skin: Color3, shirt: Color3, pants: Color3, hair: Color3 }
 	local skin = Palette.Peach
@@ -423,7 +455,12 @@ local function addPlayer(player: Player)
 		name = nil,
 	}
 	if player ~= Players.LocalPlayer then
-		local name = Text.centered(nil, string.upper(string.sub(player.DisplayName, 1, 10)), 80, { color = Palette.Mist, zindex = 3 })
+		local name = Text.centered(
+			nil,
+			string.upper(string.sub(player.DisplayName, 1, 10)),
+			80,
+			{ color = Palette.Mist, zindex = 3 }
+		)
 		actor:attach("Name", name, -40, -32)
 		view.name = name
 	end
@@ -510,8 +547,18 @@ end
 
 -- Frame loop -------------------------------------------------------------------------------
 
-local function within(rect: { number }, x0: number, y0: number, x1: number, y1: number, margin: number): boolean
-	return rect[1] + rect[3] >= x0 - margin and rect[1] <= x1 + margin and rect[2] + rect[4] >= y0 - margin and rect[2] <= y1 + margin
+local function within(
+	rect: { number },
+	x0: number,
+	y0: number,
+	x1: number,
+	y1: number,
+	margin: number
+): boolean
+	return rect[1] + rect[3] >= x0 - margin
+		and rect[1] <= x1 + margin
+		and rect[2] + rect[4] >= y0 - margin
+		and rect[2] <= y1 + margin
 end
 
 function WorldView.step(dt: number)

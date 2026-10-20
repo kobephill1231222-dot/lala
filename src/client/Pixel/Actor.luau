@@ -19,7 +19,7 @@ export type Actor = typeof(setmetatable(
 		defs: { [string]: any },
 		containers: { [string]: Frame },
 		state: string?,
-		frame: number,
+		current: number, -- frame of the current animation being shown
 		flip: boolean,
 		x: number,
 		y: number,
@@ -38,7 +38,7 @@ export type Options = {
 }
 
 function Actor.new(layer: Instance, defs: { [string]: any }, options: Options?): Actor
-	local o = options or {}
+	local o: Options = options or {}
 	local holder = Instance.new("Frame")
 	holder.Name = o.name or "Actor"
 	holder.BackgroundTransparency = 1
@@ -49,7 +49,7 @@ function Actor.new(layer: Instance, defs: { [string]: any }, options: Options?):
 		defs = table.clone(defs),
 		containers = {},
 		state = nil,
-		frame = 1,
+		current = 1,
 		flip = o.flip == true,
 		x = 0,
 		y = 0,
@@ -68,7 +68,8 @@ function Actor.new(layer: Instance, defs: { [string]: any }, options: Options?):
 	for name, def in defs do
 		add(name, def, self.flip)
 	end
-	for name, source in o.mirrors or {} do
+	local mirrors: { [string]: string } = o.mirrors or {}
+	for name, source in mirrors do
 		local def = defs[source]
 		if def then
 			add(name, def, not self.flip)
@@ -97,7 +98,7 @@ function Actor.play(self: Actor, state: string, frame: number?)
 	local n = if def then #def.frames else 1
 	local wrapped = ((f - 1) % n) + 1
 	Sprite.show(self.containers[state], wrapped)
-	self.frame = wrapped
+	self.current = wrapped
 end
 
 -- Puts the actor's anchor on art pixel (x, y) and re-sorts it by y.

@@ -49,7 +49,9 @@ return function(ctx)
 		end)
 
 		it("puts every tile-sized fitting on whole tiles", function()
-			for _, v in { Layout.SlotSize, Layout.BoxSize, Layout.FarmWidth, Layout.FarmDepth, Layout.LaneWidth } do
+			for _, v in
+				{ Layout.SlotSize, Layout.BoxSize, Layout.FarmWidth, Layout.FarmDepth, Layout.LaneWidth }
+			do
 				expect(v % Layout.TileStuds).toBe(0)
 			end
 		end)
@@ -78,7 +80,9 @@ return function(ctx)
 			for i = 1, Layout.FarmCount do
 				local box = Layout.boxWorld(i)
 				expect(flat(Layout.homeCFrame(i).Position, box)).toBeLessThan(GameConfig.CollectRange)
-				expect(flat(Layout.farmFloor(i) * Layout.CollectPoint, box)).toBeLessThan(GameConfig.CollectRange)
+				expect(flat(Layout.farmFloor(i) * Layout.CollectPoint, box)).toBeLessThan(
+					GameConfig.CollectRange
+				)
 			end
 		end)
 
@@ -120,30 +124,47 @@ return function(ctx)
 			end
 		end)
 
-		it("keeps slots, pads, the lane, the Orb Box and the Collect Pad inside the fences and apart", function()
-			local half = Layout.SlotSize / 2
-			for _, f in map.farms do
-				local inner = { x0 = f.floor.x0 + 1, z0 = f.floor.z0 + 1, x1 = f.floor.x1 - 1, z1 = f.floor.z1 - 1 }
-				local rects = { lane = f.lane, box = f.box, collect = f.collect }
-				for s, p in f.slots do
-					rects["slot" .. s] = { x0 = p.X - half, z0 = p.Z - half, x1 = p.X + half, z1 = p.Z + half }
-				end
-				local ph = Layout.PadSize / 2
-				for p, c in f.pads do
-					rects["pad" .. p] = { x0 = c.X - ph, z0 = c.Z - ph, x1 = c.X + ph, z1 = c.Z + ph }
-				end
-				for name, r in rects do
-					assert(inside(r, inner), name .. " of farm " .. f.index .. " pokes through the fence")
-				end
-				for a, ra in rects do
-					for b, rb in rects do
-						if a < b and not ((a == "lane" and b == "box") or (a == "box" and b == "lane")) then
-							assert(not overlaps(ra, rb), a .. " overlaps " .. b .. " on farm " .. f.index)
+		it(
+			"keeps slots, pads, the lane, the Orb Box, the Collect Pad, the sign and the spawn spot inside the fences and apart",
+			function()
+				local half = Layout.SlotSize / 2
+				for _, f in map.farms do
+					local inner =
+						{ x0 = f.floor.x0 + 1, z0 = f.floor.z0 + 1, x1 = f.floor.x1 - 1, z1 = f.floor.z1 - 1 }
+					local home = Layout.homeCFrame(f.index).Position
+					local rects = {
+						lane = f.lane,
+						box = f.box,
+						collect = f.collect,
+						sign = f.sign,
+						home = { x0 = home.X - 1, z0 = home.Z - 1, x1 = home.X + 1, z1 = home.Z + 1 },
+					}
+					for s, p in f.slots do
+						rects["slot" .. s] =
+							{ x0 = p.X - half, z0 = p.Z - half, x1 = p.X + half, z1 = p.Z + half }
+					end
+					local ph = Layout.PadSize / 2
+					for p, c in f.pads do
+						rects["pad" .. p] = { x0 = c.X - ph, z0 = c.Z - ph, x1 = c.X + ph, z1 = c.Z + ph }
+					end
+					for name, r in rects do
+						assert(
+							inside(r, inner, 1e-3),
+							name .. " of farm " .. f.index .. " pokes through the fence"
+						)
+					end
+					for a, ra in rects do
+						for b, rb in rects do
+							if
+								a < b and not ((a == "lane" and b == "box") or (a == "box" and b == "lane"))
+							then
+								assert(not overlaps(ra, rb), a .. " overlaps " .. b .. " on farm " .. f.index)
+							end
 						end
 					end
 				end
 			end
-		end)
+		)
 
 		it("never blocks a gate, a road, a slot, a pad or the Collect Pad with something solid", function()
 			local walk = {}

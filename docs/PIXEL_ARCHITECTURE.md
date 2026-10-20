@@ -51,7 +51,7 @@ All pure (no Instances, no randomness: use a hash of coordinates for variation),
   `Shared/Config/Sorcerers` (hair style, colours, accessories, hair streak), never hard-coded per
   id. `idle` has 2 frames (breathing bob); `attack` has 3 frames (wind-up, strike, follow-through)
   matching the Sorcerer's `style` (Punch, Cast, Slash, Shoot). Faces RIGHT (the renderer
-  mirrors for left). Unknown ids get a generic Sorcerer. `color` is the technique colour (snapped).
+  mirrors for left). Unknown ids get a generic Sorcerer. `color` is the technique glow drawn on the strike (palette colour, hue kept); orbs and technique effects use it.
 - `Characters.companion(name): Def?` for Toad, Moth, Mask, Wolf, Serpent (2 idle frames, at most
   14x14, anchor bottom middle).
 - `Characters.portrait(id): Def`: 24x24 head and shoulders facing front, 1 frame (UI cards, lists).

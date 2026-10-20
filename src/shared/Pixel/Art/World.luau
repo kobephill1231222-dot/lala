@@ -3,14 +3,17 @@
 -- art-pixel rectangles (footprints from Config/WorldMap, 4 art px per stud). Top-down 3/4 view:
 -- tall things stand on their footprint and rise up the screen. Parts above head height
 -- (roofs, canopies, lantern and pillar tops) go in `high`, drawn over characters; the rest in
--- `low`. Ground detail is sparse, placed on a grid of absolute art pixels with a coordinate
--- hash (no randomness), and skipped where other ground or a farm fitting will cover it.
+-- `low`. Nothing in `high` comes lower than 20 px above the footprint's bottom edge, so a
+-- character (20 px tall) standing just in front of an object is never drawn under it. Ground
+-- detail is placed on a grid of absolute art pixels with a coordinate hash (no randomness),
+-- and skipped where other ground or a farm fitting will cover it.
 
 local Palette = require(script.Parent.Parent.Palette)
 local Canvas = require(script.Parent.Parent.Canvas)
 local Icons = require(script.Parent.Icons)
 local WorldMap = require(script.Parent.Parent.Parent.Config.WorldMap)
 local Layout = require(script.Parent.Parent.Parent.Config.FarmLayout)
+local Upgrades = require(script.Parent.Parent.Parent.Config.Upgrades)
 
 type Canvas = Canvas.Canvas
 type Box = { number } -- x0, y0, x1, y1 (art pixels, x1/y1 exclusive)
@@ -20,6 +23,10 @@ local World = {}
 local P = Palette
 
 World.SlatSpacing = 8 -- lane slats repeat every 8 px
+
+-- How far above its footprint's bottom edge an object's `high` art must stay (a character's
+-- height): a character standing in front of the object is never covered by it.
+World.HeadRoom = 20
 
 local function round(n: number): number
 	return math.floor(n + 0.5)
@@ -59,10 +66,13 @@ local covers: { [string]: { Box } }? = nil
 local function coverFor(kind: string): { Box }
 	if not covers then
 		local map = WorldMap.get()
-		local grass, floor, plaza = {}, {}, {}
+		local grass, floor, plaza, roads = {}, {}, {}, {}
 		for _, g in map.ground do
 			if g.kind ~= "grass" then
 				table.insert(grass, artBox(g.rect))
+			end
+			if g.kind == "road" then
+				table.insert(roads, artBox(g.rect))
 			end
 		end
 		local slot = Layout.SlotSize * Layout.PixelsPerStud / 2
@@ -85,13 +95,23 @@ local function coverFor(kind: string): { Box }
 				table.insert(plaza, artBox(o.rect))
 			end
 		end
-		covers = { grass = grass, farmFloor = floor, plaza = plaza }
+		covers = { grass = grass, farmFloor = floor, plaza = plaza, roads = roads }
 	end
 	return (covers :: any)[kind] or {}
 end
 
 -- Is the detail rectangle inside the ground rectangle and not under anything?
-local function free(list: { Box }, gx: number, gy: number, gw: number, gh: number, x: number, y: number, w: number, h: number): boolean
+local function free(
+	list: { Box },
+	gx: number,
+	gy: number,
+	gw: number,
+	gh: number,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+): boolean
 	if x < gx or y < gy or x + w > gx + gw or y + h > gy + gh then
 		return false
 	end
@@ -120,25 +140,26 @@ end
 
 -- GROUND ------------------------------------------------------------------------------------
 
+-- Grass: tufts as in the mock (a Leaf blade with a Pine shadow), the odd leaf speck, dark
+-- clump or flower, one per 12 px cell on most cells.
+local GRASS_CELL = 12
+
 local function grass(c: Canvas, x: number, y: number, w: number, h: number)
 	c:rect(x, y, w, h, P.Grass)
 	local cover = coverFor("grass")
-	local cell = 20
+	local cell = GRASS_CELL
 	for cy = math.floor(y / cell), math.floor((y + h - 1) / cell) do
 		for cx = math.floor(x / cell), math.floor((x + w - 1) / cell) do
-			if hash(cx, cy, 1) < 0.7 then
+			if hash(cx, cy, 1) < 0.58 then
 				local tx = cx * cell + 1 + math.floor(hash(cx, cy, 2) * (cell - 4))
 				local ty = cy * cell + 1 + math.floor(hash(cx, cy, 3) * (cell - 3))
 				local kind = hash(cx, cy, 4)
 				if free(cover, x, y, w, h, tx, ty, 3, 2) then
-					if kind < 0.45 then -- tuft (as in the mock): .l. / lld
-						c:rect(tx + 1, ty, 1, 1, P.Leaf)
-						c:rect(tx, ty + 1, 2, 1, P.Leaf)
+					if kind < 0.62 then -- tuft: .l. / .ld
+						c:rect(tx + 1, ty, 1, 2, P.Leaf)
 						c:rect(tx + 2, ty + 1, 1, 1, P.Pine)
-					elseif kind < 0.85 then -- small tuft: .l / ld
-						c:rect(tx + 1, ty, 1, 1, P.Leaf)
-						c:rect(tx, ty + 1, 1, 1, P.Leaf)
-						c:rect(tx + 1, ty + 1, 1, 1, P.Pine)
+					elseif kind < 0.8 then -- leaf speck
+						c:rect(tx + 1, ty + 1, 1, 1, P.Leaf)
 					elseif kind < 0.93 then -- dark clump
 						c:rect(tx, ty + 1, 3, 1, P.Pine)
 						c:rect(tx + 1, ty, 1, 1, P.Pine)
@@ -152,30 +173,49 @@ local function grass(c: Canvas, x: number, y: number, w: number, h: number)
 	end
 end
 
+-- Farm floor: Tan dirt with Sand and Cream specks (one per 9 px cell on most cells) and the
+-- odd pebble, as in the mock.
 local function farmFloor(c: Canvas, x: number, y: number, w: number, h: number)
 	c:rect(x, y, w, h, P.Tan)
 	local cover = coverFor("farmFloor")
-	local cell = 12
+	local cell = 9
 	for cy = math.floor(y / cell), math.floor((y + h - 1) / cell) do
 		for cx = math.floor(x / cell), math.floor((x + w - 1) / cell) do
 			local roll = hash(cx, cy, 11)
-			if roll < 0.7 then
+			if roll < 0.78 then
 				local sx = cx * cell + math.floor(hash(cx, cy, 12) * (cell - 2))
 				local sy = cy * cell + math.floor(hash(cx, cy, 13) * (cell - 2))
-				if roll < 0.06 then -- pebble
+				if roll < 0.04 then -- pebble
 					if free(cover, x, y, w, h, sx, sy, 2, 2) then
 						c:rect(sx, sy, 2, 1, P.Cream)
 						c:rect(sx, sy + 1, 2, 1, P.Sand)
 					end
 				elseif free(cover, x, y, w, h, sx, sy, 1, 1) then
-					c:rect(sx, sy, 1, 1, if roll < 0.5 then P.Sand else P.Cream)
+					c:rect(sx, sy, 1, 1, if roll < 0.52 then P.Sand else P.Cream)
 				end
 			end
 		end
 	end
 end
 
--- Light stone slabs (32 x 16, running bond) with a curb.
+-- A horizontal line from x0 to x1 (exclusive) with the gaps cut out.
+local function hline(c: Canvas, x0: number, x1: number, y: number, gaps: { { number } }, color: Color3)
+	local cursor = x0
+	table.sort(gaps, function(a, b)
+		return a[1] < b[1]
+	end)
+	for _, g in gaps do
+		if g[1] > cursor then
+			c:rect(cursor, y, math.min(g[1], x1) - cursor, 1, color)
+		end
+		cursor = math.max(cursor, g[2])
+	end
+	if x1 > cursor then
+		c:rect(cursor, y, x1 - cursor, 1, color)
+	end
+end
+
+-- Light stone slabs (32 x 16, running bond) with a curb, open where a road comes in.
 local function plaza(c: Canvas, x: number, y: number, w: number, h: number)
 	c:rect(x, y, w, h, P.Mist)
 	local cover = coverFor("plaza")
@@ -204,9 +244,18 @@ local function plaza(c: Canvas, x: number, y: number, w: number, h: number)
 			end
 		end
 	end
-	-- curb
-	c:rect(x, y, w, 1, P.Steel)
-	c:rect(x, y + h - 1, w, 1, P.Steel)
+	-- curb, open at the road mouths
+	local top, bottom = {}, {}
+	for _, r in coverFor("roads") do
+		if math.abs(r[4] - y) <= 1 then
+			table.insert(top, { r[1], r[3] })
+		end
+		if math.abs(r[2] - (y + h)) <= 1 then
+			table.insert(bottom, { r[1], r[3] })
+		end
+	end
+	hline(c, x, x + w, y, top, P.Steel)
+	hline(c, x, x + w, y + h - 1, bottom, P.Steel)
 	c:rect(x, y, 1, h, P.Steel)
 	c:rect(x + w - 1, y, 1, h, P.Steel)
 end
@@ -269,26 +318,40 @@ local function posts(a: number, b: number, size: number, step: number): { number
 	return out
 end
 
+-- A standing fence post, 4 x 12, on `bottom`.
+local function post(c: Canvas, px: number, bottom: number)
+	c:rect(px, bottom - 12, 4, 12, P.DarkBrown)
+	c:rect(px + 1, bottom - 11, 2, 10, P.Bark)
+	c:rect(px + 1, bottom - 11, 2, 1, P.Clay)
+end
+
 -- Wooden fence: rails with posts every 8 px. Horizontal runs stand 12 px tall on the
--- footprint's bottom edge; vertical runs are a column of rail tops.
+-- footprint's bottom edge; vertical runs are a column of rail tops between two standing end
+-- posts, which land exactly on the end posts of the horizontal runs at the corners.
 local function fence(low: Canvas, _high: Canvas, variant: string?, x: number, y: number, w: number, h: number)
 	local vertical = if variant then variant == "v" else h > w
 	if vertical then
-		local cx = x + math.floor(w / 2) - 3
-		low:rect(cx, y, 6, h, P.DarkBrown)
-		low:rect(cx + 1, y, 4, h, P.Bark)
-		low:rect(cx + 1, y, 1, h, P.Clay)
-		for _, py in posts(y, y + h, 2, 8) do
-			low:rect(cx - 1, py, 8, 3, P.DarkBrown)
-			low:rect(cx, py + 1, 6, 1, P.Clay)
+		local cx = x + math.floor(w / 2) - 3 -- 6 px column centred on the footprint
+		local px = x + math.floor((w - 4) / 2)
+		local top, bottom = y + 4, y + h - 12 -- between the end posts
+		if bottom > top then
+			low:rect(cx, top, 6, bottom - top, P.DarkBrown)
+			low:rect(cx + 1, top, 4, bottom - top, P.Bark)
+			low:rect(cx + 1, top, 1, bottom - top, P.Clay)
+			local py = (math.floor((top + 4) / 8) + 1) * 8
+			while py <= bottom - 6 do
+				low:rect(cx - 1, py, 8, 3, P.DarkBrown)
+				low:rect(cx, py + 1, 6, 1, P.Clay)
+				py += 8
+			end
 		end
+		post(low, px, y + 4)
+		post(low, px, y + h)
 	else
 		local bottom = y + h
 		local top = bottom - 12
 		for _, px in posts(x, x + w, 4, 8) do
-			low:rect(px, top, 4, 12, P.DarkBrown)
-			low:rect(px + 1, top + 1, 2, 10, P.Bark)
-			low:rect(px + 1, top + 1, 2, 1, P.Clay)
+			post(low, px, bottom)
 		end
 		low:rect(x, top + 2, w, 7, P.DarkBrown)
 		low:rect(x, top + 3, w, 1, P.Clay)
@@ -300,7 +363,15 @@ end
 
 -- The Orb Box: a wooden crate-box with a gold rim, seen from above with its front face at
 -- the bottom. The renderer fills World.orbBoxInterior with the orbs.
-local function orbBox(low: Canvas, _high: Canvas, _variant: string?, x: number, y: number, w: number, h: number)
+local function orbBox(
+	low: Canvas,
+	_high: Canvas,
+	_variant: string?,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+)
 	local front = math.max(4, math.floor(h / 4)) -- front face height
 	local open = h - front -- rows of the top view
 	low:rect(x, y, w, h, P.Ink)
@@ -336,10 +407,19 @@ function World.orbBoxInterior(x: number, y: number, w: number, h: number): (numb
 	return x + 4, y + 4, w - 8, h - front - 7
 end
 
--- Stone toro lantern with a lit window; the roof is high.
-local function lantern(low: Canvas, high: Canvas, _variant: string?, x: number, y: number, w: number, h: number)
+-- Stone toro lantern with a lit window; the roof is high (and stays HeadRoom clear).
+local function lantern(
+	low: Canvas,
+	high: Canvas,
+	_variant: string?,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+)
 	local b = y + h
 	local cx = x + math.floor(w / 2)
+	local roof = b - World.HeadRoom -- bottom of the roof
 	-- base and post
 	low:rect(cx - 4, b - 3, 8, 3, P.Ink)
 	low:rect(cx - 3, b - 3, 6, 2, P.Steel)
@@ -349,24 +429,33 @@ local function lantern(low: Canvas, high: Canvas, _variant: string?, x: number, 
 	low:rect(cx - 4, b - 12, 8, 3, P.Ink)
 	low:rect(cx - 3, b - 12, 6, 1, P.Mist)
 	low:rect(cx - 3, b - 11, 6, 1, P.Slate)
-	low:rect(cx - 3, b - 17, 6, 5, P.Ink)
-	low:rect(cx - 2, b - 17, 4, 5, P.Slate)
-	low:rect(cx - 1, b - 16, 2, 3, P.Yellow)
-	low:rect(cx - 1, b - 14, 2, 1, P.Amber)
+	low:rect(cx - 3, roof, 6, b - 12 - roof, P.Ink)
+	low:rect(cx - 2, roof, 4, b - 12 - roof, P.Slate)
+	low:rect(cx - 1, roof + 2, 2, 4, P.Yellow)
+	low:rect(cx - 1, roof + 5, 2, 1, P.Amber)
 	-- roof and jewel
-	high:rect(cx - 5, b - 20, 10, 3, P.Ink)
-	high:rect(cx - 4, b - 20, 8, 2, P.Steel)
-	high:rect(cx - 3, b - 20, 6, 1, P.Mist)
-	high:rect(cx - 1, b - 22, 2, 2, P.Ink)
-	high:rect(cx - 1, b - 22, 1, 1, P.Slate)
+	high:rect(cx - 5, roof - 3, 10, 3, P.Ink)
+	high:rect(cx - 4, roof - 3, 8, 2, P.Steel)
+	high:rect(cx - 3, roof - 3, 6, 1, P.Mist)
+	high:rect(cx - 1, roof - 5, 2, 2, P.Ink)
+	high:rect(cx - 1, roof - 5, 1, 1, P.Slate)
 end
 
--- Lacquer pillar on a black base with a gold cap; the upper shaft is high.
+-- Lacquer pillar on a black base with a gold cap; the shaft above HeadRoom is high.
 local PILLAR_H = 29
 
-local function pillar(low: Canvas, high: Canvas, _variant: string?, x: number, y: number, w: number, h: number)
+local function pillar(
+	low: Canvas,
+	high: Canvas,
+	_variant: string?,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+)
 	local b = y + h
 	local cx = x + math.floor(w / 2)
+	local split = b - World.HeadRoom
 	low:rect(cx - 3, b - 4, 6, 4, P.Ink)
 	low:rect(cx - 2, b - 3, 4, 2, P.Night)
 	local function shaft(c: Canvas, y0: number, y1: number)
@@ -375,32 +464,61 @@ local function pillar(low: Canvas, high: Canvas, _variant: string?, x: number, y
 		c:rect(cx - 2, y0, 1, y1 - y0, P.Rose)
 		c:rect(cx + 1, y0, 1, y1 - y0, P.Crimson)
 	end
-	shaft(low, b - 18, b - 4)
-	shaft(high, b - PILLAR_H + 3, b - 18)
+	shaft(low, split, b - 4)
+	shaft(high, b - PILLAR_H + 3, split)
 	high:rect(cx - 4, b - PILLAR_H, 8, 3, P.Ink)
 	high:rect(cx - 3, b - PILLAR_H + 1, 6, 1, P.Yellow)
 	high:rect(cx - 3, b - PILLAR_H + 2, 6, 1, P.Amber)
 end
 
--- Sell Stand: a stone dais with the gold Sell Pad (coin emblem) in the middle, and a beam
--- with a coin sign across the two back pillars. The corner pillars are separate objects in
--- the outer ring of the footprint, which the dais leaves clear (draw order never matters).
-local function sellStand(low: Canvas, high: Canvas, _variant: string?, x: number, y: number, w: number, h: number)
+-- A small stack of gold coins (each 5 x 3: Yellow top, Amber edge, Brown outline), the top
+-- coin nudged sideways; `bottom` is the stack's bottom edge.
+local function coins(c: Canvas, x: number, bottom: number, n: number)
+	for i = 0, n - 1 do
+		local cx = x + (if i % 2 == 1 then 1 else 0)
+		local cy = bottom - 4 - i * 2
+		c:rect(cx + 1, cy, 3, 4, P.Brown)
+		c:rect(cx, cy + 1, 5, 2, P.Brown)
+		c:rect(cx + 1, cy + 1, 3, 1, P.Yellow)
+		c:rect(cx + 1, cy + 2, 3, 1, P.Amber)
+	end
+end
+
+-- Sell Stand: a two-tier stone dais with the gold Sell Pad (coin emblem) on the upper tier,
+-- coin stacks either side of the front step, and a beam with a coin plaque across the two
+-- back pillars.
+-- The corner pillars are separate objects in the outer ring of the footprint, which the dais
+-- leaves clear (draw order never matters).
+local function sellStand(
+	low: Canvas,
+	high: Canvas,
+	_variant: string?,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+)
 	local cx, cy = x + math.floor(w / 2), y + math.floor(h / 2)
 	local ring = math.max(2, round(w / 8))
 	local dx, dy, dw, dh = x + ring, y + ring, w - ring * 2, h - ring * 2
-	local face = 4
-	-- dais, with its front face and a step
+	local face = 3
+	-- lower tier: Slate slab with a Steel front face
 	low:rect(dx, dy, dw, dh, P.Ink)
-	low:rect(dx + 1, dy + 1, dw - 2, dh - 2, P.Slate)
-	low:rect(dx + 1, dy + dh - 2, dw - 2, 1, P.Steel)
-	low:rect(dx + 1, dy + 1, dw - 2, dh - 2 - face, P.Mist)
-	low:rect(dx + 1, dy + 1, dw - 2, 1, P.White)
+	low:rect(dx + 1, dy + 1, dw - 2, dh - 2, P.Steel)
+	low:rect(dx + 1, dy + 1, dw - 2, dh - 2 - face, P.Slate)
+	low:rect(dx + 1, dy + 1, dw - 2, 1, P.Mist)
+	-- upper tier: Mist slab, inset, with its own face
+	local s = math.min(Layout.PixelsPerStud * 6, dw - 8, dh - 8 - face)
+	local ux, uy, uw, uh = dx + 3, dy + 2, dw - 6, dh - 2 - face - 1
+	low:rect(ux, uy, uw, uh, P.Ink)
+	low:rect(ux + 1, uy + 1, uw - 2, uh - 2, P.Slate)
+	low:rect(ux + 1, uy + 1, uw - 2, uh - 2 - 2, P.Mist)
+	low:rect(ux + 1, uy + 1, uw - 2, 1, P.White)
+	-- front step
 	low:rect(cx - 9, dy + dh - 1, 18, 4, P.Ink)
 	low:rect(cx - 8, dy + dh - 1, 16, 2, P.Mist)
 	low:rect(cx - 8, dy + dh + 1, 16, 1, P.Slate)
 	-- the Sell Pad (6 x 6 studs), gold with a coin
-	local s = math.min(Layout.PixelsPerStud * 6, dw - 8, dh - 8 - face)
 	local px, py = cx - math.floor(s / 2), cy - math.floor(s / 2)
 	low:rect(px, py, s, s, P.Brown)
 	low:rect(px + 1, py + 1, s - 2, s - 2, P.Orange)
@@ -409,41 +527,51 @@ local function sellStand(low: Canvas, high: Canvas, _variant: string?, x: number
 	low:rect(px + 2, py + 2, 1, s - 4, P.Yellow)
 	local coin = Icons.get("cash")
 	low:sprite(coin, cx - math.floor(coin.w / 2), cy - math.floor(coin.h / 2))
-	-- coin stacks either side of the pad
-	local gap = px - dx
-	if gap >= 7 then
-		for _, sx in { dx + math.floor(gap / 2) - 2, px + s + math.floor(gap / 2) - 2 } do
-			low:rect(sx, cy - 3, 4, 6, P.Brown)
-			low:rect(sx, cy - 3, 4, 1, P.Yellow)
-			low:rect(sx, cy - 1, 4, 1, P.Amber)
-			low:rect(sx, cy + 1, 4, 1, P.Amber)
-		end
-	end
-	-- beam on the back pillars, with a hanging coin sign
+	-- coin stacks either side of the front step
+	coins(low, cx - 17, dy + dh + 3, 3)
+	coins(low, cx + 11, dy + dh + 2, 2)
+	-- beam on the back pillars, with a coin plaque standing on it (kept HeadRoom clear of the
+	-- back pillars' footprint)
 	local by = y + ring - PILLAR_H - 3
 	high:rect(x, by, w, 4, P.Ink)
 	high:rect(x + 1, by + 1, w - 2, 2, P.Crimson)
 	high:rect(x + 1, by + 1, w - 2, 1, P.Red)
 	local sw, sh = 16, 14
-	high:rect(cx - sw / 2, by + 3, sw, sh, P.Ink)
-	high:rect(cx - sw / 2 + 1, by + 4, sw - 2, sh - 2, P.Amber)
-	high:rect(cx - sw / 2 + 2, by + 5, sw - 4, sh - 4, P.Night)
-	high:sprite(coin, cx - math.floor(coin.w / 2), by + 5)
+	local sy = by - 7
+	high:rect(cx - sw / 2, sy, sw, sh, P.Ink)
+	high:rect(cx - sw / 2 + 1, sy + 1, sw - 2, sh - 2, P.Amber)
+	high:rect(cx - sw / 2 + 2, sy + 2, sw - 4, sh - 4, P.Night)
+	high:sprite(coin, cx - math.floor(coin.w / 2), sy + 2)
 end
 
 -- A Japanese shop: tiled roof (high), plaster front wall with an open counter (low), a sign
--- board on the eave with the shop's icon.
+-- board on the eave with the shop's icon. The Crate Shop has a slate roof and a navy noren,
+-- the Upgrade Shop a green copper roof and a pine noren.
 local SHOPS = {
-	crateShop = { timber = P.Crimson, noren = P.Navy, mark = P.White, icon = "crateShop", goods = { P.Sky, P.Orchid, P.Amber } },
-	upgradeShop = { timber = P.Brown, noren = P.Pine, mark = P.Leaf, icon = "upgradeShop", goods = { P.Cream, P.Cream, P.Cream } },
+	crateShop = {
+		timber = P.Crimson,
+		noren = P.Navy,
+		icon = "crateShop",
+		goods = { P.Sky, P.Orchid, P.Amber },
+		-- roof: tiles, ribs, courses, fascia, ridge, ridge highlight
+		roof = { P.Dusk, P.Steel, P.Night, P.Slate, P.Night, P.Steel },
+	},
+	upgradeShop = {
+		timber = P.Brown,
+		noren = P.Pine,
+		icon = "upgradeShop",
+		goods = { P.Cream, P.Leaf, P.Cream },
+		roof = { P.Pine, P.Grass, P.DeepTeal, P.Grass, P.DeepTeal, P.Grass },
+	},
 }
 
 local function shop(kind: string): Draw
 	local style = SHOPS[kind]
+	local roof = style.roof
 	return function(low: Canvas, high: Canvas, _variant: string?, x: number, y: number, w: number, h: number)
 		local b = y + h
 		local cx = x + math.floor(w / 2)
-		local eave = b - 22 -- bottom of the roof
+		local eave = b - World.HeadRoom - 2 -- bottom of the roof
 		-- Wall
 		low:rect(x, eave - 2, w, b - eave + 2, P.Ink)
 		low:rect(x + 1, eave - 2, w - 2, b - eave, P.Cream)
@@ -453,22 +581,20 @@ local function shop(kind: string): Draw
 		for _, tx in { x + 1, x + w - 3, x + math.floor(w / 4) - 1, x + w - math.floor(w / 4) - 1 } do
 			low:rect(tx, eave - 2, 2, b - eave - 2, style.timber)
 		end
-		-- open front with goods on a shelf, a noren curtain and the counter
+		-- open front: a short noren curtain, goods on the counter peeking out under it
 		local ow = math.floor(w / 2) - 4
 		local ox = cx - math.floor(ow / 2)
 		low:rect(ox, eave + 6, ow, b - eave - 10, P.Night)
-		low:rect(ox, eave + 11, ow, 1, P.Brown) -- shelf
-		for i, color in style.goods do
-			local gx = ox + 4 + (i - 1) * math.floor((ow - 12) / 2)
-			low:rect(gx, eave + 8, 4, 3, P.Ink)
-			low:rect(gx + 1, eave + 8, 2, 2, color)
-		end
 		local flaps = 4
 		local fw = math.floor((ow - (flaps - 1)) / flaps)
 		for i = 0, flaps - 1 do
-			low:rect(ox + i * (fw + 1), eave + 6, fw, 4, style.noren)
+			low:rect(ox + i * (fw + 1), eave + 6, fw, 3, style.noren)
 		end
-		low:rect(cx - 1, eave + 7, 2, 2, style.mark)
+		for i, color in style.goods do
+			local gx = ox + 4 + (i - 1) * math.floor((ow - 12) / 2)
+			low:rect(gx, b - 12, 4, 3, P.Ink)
+			low:rect(gx + 1, b - 11, 2, 2, color)
+		end
 		low:rect(ox - 2, b - 9, ow + 4, 5, P.Ink) -- counter
 		low:rect(ox - 1, b - 8, ow + 2, 3, P.Bark)
 		low:rect(ox - 1, b - 8, ow + 2, 1, P.Tan)
@@ -483,29 +609,29 @@ local function shop(kind: string): Draw
 		local rx0, rx1 = x - 4, x + w + 4
 		local top = y - 6
 		high:rect(rx0, top, rx1 - rx0, eave - top + 1, P.Ink)
-		high:rect(rx0 + 1, top + 1, rx1 - rx0 - 2, eave - top - 2, P.Dusk)
+		high:rect(rx0 + 1, top + 1, rx1 - rx0 - 2, eave - top - 2, roof[1])
 		for rib = math.floor((rx0 + 3) / 6) * 6 + 3, rx1 - 3, 6 do
-			high:rect(rib, top + 2, 1, eave - top - 5, P.Steel)
+			high:rect(rib, top + 2, 1, eave - top - 5, roof[2])
 		end
 		for _, ly in { top + 7, top + 13, top + 19 } do
 			if ly < eave - 4 then
-				high:rect(rx0 + 1, ly, rx1 - rx0 - 2, 1, P.Night)
+				high:rect(rx0 + 1, ly, rx1 - rx0 - 2, 1, roof[3])
 			end
 		end
-		high:rect(rx0 + 1, eave - 3, rx1 - rx0 - 2, 1, P.Slate) -- fascia
-		high:rect(rx0 + 1, eave - 2, rx1 - rx0 - 2, 2, P.Night)
+		high:rect(rx0 + 1, eave - 3, rx1 - rx0 - 2, 1, roof[4]) -- fascia
+		high:rect(rx0 + 1, eave - 2, rx1 - rx0 - 2, 2, roof[3])
 		high:rect(x + 2, top - 5, w - 4, 6, P.Ink) -- ridge
-		high:rect(x + 3, top - 4, w - 6, 4, P.Night)
-		high:rect(x + 3, top - 4, w - 6, 1, P.Steel)
+		high:rect(x + 3, top - 4, w - 6, 4, roof[5])
+		high:rect(x + 3, top - 4, w - 6, 1, roof[6])
 		for _, ex in { x, x + w - 6 } do
 			high:rect(ex, top - 7, 6, 8, P.Ink)
-			high:rect(ex + 1, top - 6, 4, 6, P.Night)
-			high:rect(ex + 1, top - 6, 4, 1, P.Slate)
+			high:rect(ex + 1, top - 6, 4, 6, roof[5])
+			high:rect(ex + 1, top - 6, 4, 1, roof[4])
 		end
-		-- sign board hanging from the eave
+		-- sign board hanging from the eave (its bottom level with the eave's)
 		local icon = Icons.get(style.icon)
 		local sw, sh = 28, 14
-		local sx, sy = cx - math.floor(sw / 2), eave - sh + 5
+		local sx, sy = cx - math.floor(sw / 2), eave + 1 - sh
 		high:rect(sx, sy, sw, sh, P.Ink)
 		high:rect(sx + 1, sy + 1, sw - 2, sh - 2, P.Amber)
 		high:rect(sx + 2, sy + 2, sw - 4, sh - 4, P.Night)
@@ -523,7 +649,15 @@ local TIER_TRIM: { [string]: { Color3 } } = {
 	legendary = { P.Amber, P.Orange },
 }
 
-local function display(low: Canvas, _high: Canvas, variant: string?, x: number, y: number, w: number, h: number)
+local function display(
+	low: Canvas,
+	_high: Canvas,
+	variant: string?,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+)
 	local trim = TIER_TRIM[variant or ""] or TIER_TRIM.starter
 	local face = math.max(3, math.floor(h * 3 / 8))
 	local topH = h - face
@@ -540,8 +674,27 @@ local function display(low: Canvas, _high: Canvas, variant: string?, x: number, 
 	end
 end
 
--- Upgrade board: a notice board on two lacquer posts; its tiled cap is high.
-local function upgradeBoard(low: Canvas, high: Canvas, _variant: string?, x: number, y: number, w: number, h: number)
+-- Upgrade board: a notice board on two lacquer posts with one note per farm upgrade (in
+-- Config/Upgrades order, each marked in its icon's key colour); its tiled cap is high.
+local NOTE_COLOR: { [string]: Color3 } = {
+	orbValue = P.Orchid,
+	slots = P.Slate,
+	boxSize = P.Bark,
+	openSpeed = P.Amber,
+	pads = P.Red,
+	luck = P.Leaf,
+	walkSpeed = P.Sky,
+}
+
+local function upgradeBoard(
+	low: Canvas,
+	high: Canvas,
+	_variant: string?,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+)
 	local b = y + h
 	local top = b - 24
 	for _, px in { x + 2, x + w - 6 } do
@@ -549,17 +702,21 @@ local function upgradeBoard(low: Canvas, high: Canvas, _variant: string?, x: num
 		low:rect(px + 1, top, 2, b - top - 1, P.Red)
 		low:rect(px + 1, top, 1, b - top - 1, P.Rose)
 	end
-	low:rect(x + 4, top + 2, w - 8, 14, P.Ink)
-	low:rect(x + 5, top + 3, w - 10, 12, P.Bark)
-	low:rect(x + 5, top + 3, w - 10, 1, P.Clay)
-	local notes = math.max(1, math.floor((w - 12) / 10))
-	local gap = math.floor((w - 10 - notes * 8) / (notes + 1))
-	local marks = { P.Orchid, P.Leaf, P.Amber, P.Sky, P.Red, P.Yellow, P.Rose }
-	for i = 0, notes - 1 do
-		local nx = x + 5 + gap + i * (8 + gap)
-		low:rect(nx, top + 5, 8, 8, P.Cream)
-		low:rect(nx, top + 12, 8, 1, P.Tan)
-		low:rect(nx + 2, top + 7, 4, 3, marks[i % #marks + 1])
+	low:rect(x + 3, top + 2, w - 6, 14, P.Ink)
+	low:rect(x + 4, top + 3, w - 8, 12, P.Bark)
+	low:rect(x + 4, top + 3, w - 8, 1, P.Clay)
+	local inner = w - 8
+	local nw = 6
+	local n = math.min(#Upgrades.List, math.floor((inner - 2) / (nw + 1)))
+	local gap = if inner - n * nw - (n - 1) * 2 >= 2 then 2 else 1
+	local nx = x + 4 + math.floor((inner - n * nw - (n - 1) * gap) / 2)
+	for i = 1, n do
+		local mark = NOTE_COLOR[Upgrades.List[i].id] or P.Steel
+		low:rect(nx, top + 5, nw, 8, P.Cream)
+		low:rect(nx, top + 12, nw, 1, P.Tan)
+		low:rect(nx + 1, top + 7, nw - 2, 3, mark)
+		low:rect(nx + math.floor(nw / 2) - 1, top + 5, 2, 1, P.Crimson) -- pin
+		nx += nw + gap
 	end
 	high:rect(x, top - 3, w, 5, P.Ink)
 	high:rect(x + 1, top - 2, w - 2, 3, P.Dusk)
@@ -567,7 +724,15 @@ local function upgradeBoard(low: Canvas, high: Canvas, _variant: string?, x: num
 end
 
 -- Backless wooden bench.
-local function bench(low: Canvas, _high: Canvas, _variant: string?, x: number, y: number, w: number, h: number)
+local function bench(
+	low: Canvas,
+	_high: Canvas,
+	_variant: string?,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+)
 	local seat = math.max(3, h - 2)
 	low:rect(x + 2, y + seat - 1, 4, h - seat + 1, P.Ink)
 	low:rect(x + w - 6, y + seat - 1, 4, h - seat + 1, P.Ink)
@@ -581,7 +746,8 @@ local function bench(low: Canvas, _high: Canvas, _variant: string?, x: number, y
 	end
 end
 
--- Trees: the trunk is low, the canopy (wider than the footprint) is high.
+-- Trees: the trunk is low, the canopy (wider than the footprint) is high and stays
+-- HeadRoom clear of the footprint's bottom edge.
 local CANOPY: { [string]: { Color3 } } = {
 	-- outline, shadow, base, light
 	pine = { P.DeepTeal, P.Pine, P.Grass, P.Leaf },
@@ -592,19 +758,20 @@ local CANOPY: { [string]: { Color3 } } = {
 local function tree(low: Canvas, high: Canvas, variant: string?, x: number, y: number, w: number, h: number)
 	local kind = if variant and CANOPY[variant] then variant else "pine"
 	local col = CANOPY[kind]
-	local b = y + h - 1
+	local b = y + h - 1 -- the footprint's last row
+	local canopy = y + h - World.HeadRoom -- the canopy's bottom edge
 	local cx = x + math.floor(w / 2)
 	local flip = hash(x, y, 31) < 0.5
 	local dx = if flip then -1 else 1
-	-- trunk with a root flare
+	-- trunk with a root flare, up into the canopy
 	low:rect(cx - 4, b - 3, 8, 4, P.Ink)
 	low:rect(cx - 3, b - 3, 6, 3, P.Brown)
-	low:rect(cx - 3, b - 14, 6, 13, P.Ink)
-	low:rect(cx - 2, b - 14, 4, 12, P.Bark)
-	low:rect(cx + 1, b - 14, 1, 12, P.Brown)
+	low:rect(cx - 3, canopy - 4, 6, b - canopy + 3, P.Ink)
+	low:rect(cx - 2, canopy - 4, 4, b - canopy + 2, P.Bark)
+	low:rect(cx + 1, canopy - 4, 1, b - canopy + 2, P.Brown)
 	if kind == "pine" then
 		-- three tiers, narrower going up
-		local tiers = { { 13, 9, b - 17 }, { 10, 8, b - 25 }, { 6, 7, b - 32 } }
+		local tiers = { { 13, 9, canopy - 9 }, { 10, 8, canopy - 17 }, { 6, 7, canopy - 24 } }
 		for _, t in tiers do
 			local hw, th, ty = t[1], t[2], t[3]
 			high:rect(cx - hw, ty, hw * 2, th, col[1])
@@ -615,11 +782,11 @@ local function tree(low: Canvas, high: Canvas, variant: string?, x: number, y: n
 			high:rect(cx - hw + 3, ty, math.max(2, hw - 3), 1, col[4])
 			high:rect(cx - hw + 2, ty + 1, 2, 1, col[4])
 		end
-		high:rect(cx - 1, b - 36, 2, 3, col[1])
-		high:rect(cx - 1, b - 35, 1, 2, col[4])
+		high:rect(cx - 1, canopy - 28, 2, 3, col[1])
+		high:rect(cx - 1, canopy - 27, 1, 2, col[4])
 	else
 		-- a rounded crown of three clumps
-		local cy = b - 26
+		local cy = canopy - 11
 		blob(high, cx, cy, 13, 11, col[1])
 		blob(high, cx + dx * 2, cy + 1, 12, 10, col[2])
 		blob(high, cx - dx, cy - 1, 11, 9, col[3])
@@ -634,7 +801,15 @@ local function tree(low: Canvas, high: Canvas, variant: string?, x: number, y: n
 	end
 end
 
-local function unknown(low: Canvas, _high: Canvas, _variant: string?, x: number, y: number, w: number, h: number)
+local function unknown(
+	low: Canvas,
+	_high: Canvas,
+	_variant: string?,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+)
 	low:rect(x, y, w, h, P.Ink)
 	if w > 2 and h > 2 then
 		low:rect(x + 1, y + 1, w - 2, h - 2, P.Steel)
@@ -662,10 +837,37 @@ for kind in OBJECTS do
 end
 table.sort(World.Kinds)
 
-function World.object(low: Canvas, high: Canvas, object: WorldMap.Object, x: number, y: number, w: number, h: number)
+function World.object(
+	low: Canvas,
+	high: Canvas,
+	object: WorldMap.Object,
+	x: number,
+	y: number,
+	w: number,
+	h: number
+)
 	x, y, w, h = round(x), round(y), round(w), round(h)
-	local draw = OBJECTS[object.kind] or unknown
+	local draw: Draw = OBJECTS[object.kind] or unknown
 	draw(low, high, object.variant, x, y, w, h)
+end
+
+-- Props narrower than a character (pillars, lanterns, the upgrade board) cannot be split
+-- correctly into `low` and `high`: a character standing right behind one shows in front of
+-- its lower half. World.prop draws such an object whole (low then high) into a new Canvas, in
+-- the same art pixels as World.object, for a renderer that y-sorts it with the characters by
+-- its footprint's bottom edge (y + h). Returns nil for every other kind.
+World.PropKinds = { pillar = true, lantern = true, upgradeBoard = true } :: { [string]: boolean }
+
+function World.prop(object: WorldMap.Object, x: number, y: number, w: number, h: number): Canvas?
+	if not World.PropKinds[object.kind] then
+		return nil
+	end
+	local low, high = Canvas.new(), Canvas.new()
+	World.object(low, high, object, x, y, w, h)
+	for _, r in high.rects do
+		table.insert(low.rects, r)
+	end
+	return low
 end
 
 -- FARM FITTINGS -----------------------------------------------------------------------------
@@ -721,26 +923,30 @@ end
 function World.slot(canvas: Canvas, x: number, y: number, size: number, state: string)
 	x, y, size = round(x), round(y), round(size)
 	local open = state == "open"
-	local t = math.max(2, math.floor(size / 4))
 	canvas:rect(x, y, size, size, P.Ink)
 	canvas:rect(x + 1, y + 1, size - 2, size - 2, if open then P.Amber else P.Dusk)
 	canvas:rect(x + 2, y + 2, size - 4, size - 4, if open then P.Mist else P.Night)
+	-- a 4 x 4 checker of equal tiles inside the 2 px rim, joints on each tile's first column
+	local t = (size - 4) / 4
+	local function edge(k: number): number
+		return x + 2 + round(k * t)
+	end
+	local function edgeY(k: number): number
+		return y + 2 + round(k * t)
+	end
 	local tile = if open then P.Slate else P.Ink
 	for j = 0, 3 do
 		for i = 0, 3 do
 			if (i + j) % 2 == 0 then
-				local x0, y0 = math.max(x + 2, x + i * t + 1), math.max(y + 2, y + j * t + 1)
-				local x1, y1 = math.min(x + size - 2, x + (i + 1) * t), math.min(y + size - 2, y + (j + 1) * t)
-				if x1 > x0 and y1 > y0 then
-					canvas:rect(x0, y0, x1 - x0, y1 - y0, tile)
-				end
+				local x0, y0 = edge(i), edgeY(j)
+				canvas:rect(x0, y0, edge(i + 1) - x0, edgeY(j + 1) - y0, tile)
 			end
 		end
 	end
 	local joint = if open then P.Steel else P.Dusk
 	for k = 1, 3 do
-		canvas:rect(x + k * t, y + 2, 1, size - 4, joint)
-		canvas:rect(x + 2, y + k * t, size - 4, 1, joint)
+		canvas:rect(edge(k), y + 2, 1, size - 4, joint)
+		canvas:rect(x + 2, edgeY(k), size - 4, 1, joint)
 	end
 	if not open then
 		local lock = Icons.get("lock")
@@ -762,7 +968,14 @@ function World.pad(canvas: Canvas, x: number, y: number, size: number, state: st
 	if open then
 		canvas:rect(x + 2, y + 2, size - 4, 1, P.Slate)
 		canvas:rect(x + 2, y + 2, 1, size - 4, P.Slate)
-		for _, c in { { x + 2, y + 2 }, { x + size - 4, y + 2 }, { x + 2, y + size - 4 }, { x + size - 4, y + size - 4 } } do
+		for _, c in
+			{
+				{ x + 2, y + 2 },
+				{ x + size - 4, y + 2 },
+				{ x + 2, y + size - 4 },
+				{ x + size - 4, y + size - 4 },
+			}
+		do
 			canvas:rect(c[1], c[2], 2, 2, P.Red)
 		end
 	else

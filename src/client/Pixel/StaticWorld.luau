@@ -3,7 +3,10 @@
 -- displays) once, from Shared/Config/WorldMap and the World art, into 128-pixel chunks. Only
 -- chunks near the camera stay parented, so the screen holds a few hundred Frames however big
 -- the world is. Low art goes in the Ground layer (under characters), high art (canopies,
--- roofs) in the High layer (over them).
+-- roofs) in the High layer (over them). Props narrower than a character (World.PropKinds:
+-- lanterns, pillars, the Upgrade Board) are drawn whole into the Actors layer instead and
+-- y-sorted with the characters by their footprint's bottom edge, so whoever stands behind one
+-- is hidden by all of it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -58,10 +61,13 @@ local function split(canvas: Canvas.Canvas, into: { [string]: Canvas.Canvas })
 	end
 end
 
--- Draws the whole static world into canvases: (low, high).
-function StaticWorld.draw(): (Canvas.Canvas, Canvas.Canvas)
+type Prop = { canvas: Canvas.Canvas, bottom: number }
+
+-- Draws the whole static world into canvases: (low, high, props).
+function StaticWorld.draw(): (Canvas.Canvas, Canvas.Canvas, { Prop })
 	local map = WorldMap.get()
 	local low, high = Canvas.new(), Canvas.new()
+	local props: { Prop } = {}
 	-- Ground: grass first, then the rest on top in map order.
 	for _, g in map.ground do
 		local x, y, w, h = StaticWorld.artRect(g.rect)
@@ -77,9 +83,14 @@ function StaticWorld.draw(): (Canvas.Canvas, Canvas.Canvas)
 	end)
 	for _, object in objects do
 		local x, y, w, h = StaticWorld.artRect(object.rect)
-		World.object(low, high, object, x, y, w, h)
+		local prop = World.prop(object, x, y, w, h)
+		if prop then
+			table.insert(props, { canvas = prop, bottom = y + h })
+		else
+			World.object(low, high, object, x, y, w, h)
+		end
 	end
-	return low, high
+	return low, high, props
 end
 
 local function buildChunks(canvas: Canvas.Canvas, layer: Frame, tag: string)
@@ -109,9 +120,29 @@ function StaticWorld.build()
 	table.clear(chunks)
 	table.clear(active)
 	StaticWorld.frameCount = 0
-	local low, high = StaticWorld.draw()
+	local low, high, props = StaticWorld.draw()
 	buildChunks(low, Screen.layers.Ground, "G")
 	buildChunks(high, Screen.layers.High, "H")
+	-- Props: one Frame each in the Actors layer, sorted like an actor whose feet are on the
+	-- footprint's bottom row (Actor uses ZIndex = y * 4 + zBias), culled with the chunks.
+	local size = StaticWorld.ChunkSize
+	for i, prop in props do
+		local x0, y0, x1, y1 = prop.canvas:bounds()
+		if not (x0 and y0 and x1 and y1) then
+			continue
+		end
+		local frame = Instance.new("Frame")
+		frame.Name = "Prop" .. i
+		frame.BackgroundTransparency = 1
+		frame.BorderSizePixel = 0
+		frame.Position = UDim2.fromOffset(x0, y0)
+		frame.Size = UDim2.fromOffset(x1 - x0, y1 - y0)
+		frame.ZIndex = prop.bottom * 4
+		local count = prop.canvas:build(frame, 1, x0, y0)
+		StaticWorld.frameCount += count
+		local cx, cy = math.floor((x0 + x1) / 2 / size), math.floor(prop.bottom / size)
+		chunks["P" .. i] = { frame = frame, layer = Screen.layers.Actors, cx = cx, cy = cy, count = count }
+	end
 end
 
 -- Parents the chunks within the view (plus a margin) and unparents the rest.

@@ -30,7 +30,15 @@ function Canvas.px(self: Canvas, x: number, y: number, color: Color3)
 end
 
 -- Draws a sprite frame (Sprite.Def rows) at (x, y) top-left, optionally mirrored.
-function Canvas.sprite(self: Canvas, def: any, x: number, y: number, frame: number?, flip: boolean?, palette: { [string]: Color3 }?)
+function Canvas.sprite(
+	self: Canvas,
+	def: any,
+	x: number,
+	y: number,
+	frame: number?,
+	flip: boolean?,
+	palette: { [string]: Color3 }?
+)
 	for _, r in def.rects[frame or 1] do
 		local rx = if flip then def.w - r.x - r.w else r.x
 		self:rect(x + rx, y + r.y, r.w, r.h, (palette and palette[r.key]) or def.palette[r.key])
@@ -66,7 +74,14 @@ end
 -- Creates one Frame per rectangle under `parent`, at `scale` screen pixels per art pixel,
 -- offset so art pixel (originX, originY) lands at the parent's top-left. Later rectangles draw
 -- on top of earlier ones (sibling order with one ZIndex).
-function Canvas.build(self: Canvas, parent: Instance, scale: number, originX: number?, originY: number?, zindex: number?): number
+function Canvas.build(
+	self: Canvas,
+	parent: Instance,
+	scale: number,
+	originX: number?,
+	originY: number?,
+	zindex: number?
+): number
 	local ox, oy = originX or 0, originY or 0
 	for _, r in self.rects do
 		local f = Instance.new("Frame")

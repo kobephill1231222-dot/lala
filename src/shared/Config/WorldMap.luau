@@ -29,6 +29,7 @@ export type FarmInfo = {
 	box: Rect,
 	collect: Rect,
 	gate: Vector3, -- middle of the gate gap
+	sign: Rect, -- the farm's name board, just inside the front fence
 	slots: { Vector3 }, -- slot centres
 	pads: { Vector3 }, -- crate pad centres
 	laneStart: Vector3, -- back end of the lane
@@ -52,6 +53,11 @@ local function farmRect(cf: CFrame, lx: number, lz: number, w: number, d: number
 	local c = cf * Vector3.new(lx, 0, lz)
 	return R(c.X, c.Z, w, d)
 end
+
+-- Name board: 22 x 5 studs (88 x 20 art px: two lines of 10 letters, "<NAME>" / "'S FARM"),
+-- just inside the front fence between the gate and the side fence, on the side away from the
+-- spawn spot, so nothing outside the farm (lanterns, shop roofs) can cover it.
+local SIGN_W, SIGN_D = 22, 5
 
 local function farmInfo(index: number): FarmInfo
 	local cf = Layout.farmFloor(index)
@@ -78,6 +84,13 @@ local function farmInfo(index: number): FarmInfo
 			Layout.CollectPadSize.Z
 		),
 		gate = cf * Layout.Entrance,
+		sign = farmRect(
+			cf,
+			Layout.FarmWidth / 2 - 1.5 - SIGN_W / 2,
+			-Layout.FarmDepth / 2 + 1 + SIGN_D / 2,
+			SIGN_W,
+			SIGN_D
+		),
 		slots = slots,
 		pads = pads,
 		laneStart = cf * Layout.LaneStart,
@@ -89,7 +102,10 @@ local function fences(objects: { Object }, info: FarmInfo)
 	local f = info.floor
 	local t = 1 -- fence thickness (studs)
 	local function add(rect: Rect, variant: string)
-		table.insert(objects, { kind = "fence", rect = rect, solid = true, variant = variant, farm = info.index })
+		table.insert(
+			objects,
+			{ kind = "fence", rect = rect, solid = true, variant = variant, farm = info.index }
+		)
 	end
 	-- Back and the two sides
 	local backZ = if info.north then f.z0 else f.z1 - t
@@ -186,39 +202,36 @@ function WorldMap.get(): Map
 		table.insert(objects, { kind = "tree", rect = R(x, 0, 3, 3), solid = true, variant = "sakura" })
 	end
 	-- Trees along the edges of the world (outside the farms)
-	local edge = {}
+	local edge: { { x: number, z: number, variant: string } } = {}
 	for x = -96, 96, 12 do
-		table.insert(edge, { x, -hd + 5, "pine" })
-		table.insert(edge, { x, hd - 5, "pine" })
+		table.insert(edge, { x = x, z = -hd + 5, variant = "pine" })
+		table.insert(edge, { x = x, z = hd - 5, variant = "pine" })
 	end
 	for z = -84, 84, 14 do
 		if math.abs(z) > Layout.PlazaHalfDepth + 2 then
-			table.insert(edge, { -hw + 5, z, if z % 28 == 0 then "sakura" else "pine" })
-			table.insert(edge, { hw - 5, z, if z % 28 == 0 then "maple" else "pine" })
+			table.insert(edge, { x = -hw + 5, z = z, variant = if z % 28 == 0 then "sakura" else "pine" })
+			table.insert(edge, { x = hw - 5, z = z, variant = if z % 28 == 0 then "maple" else "pine" })
 		end
 	end
 	for _, e in edge do
-		table.insert(objects, {
-			kind = "tree",
-			rect = R(e[1] :: number, e[2] :: number, 3, 3),
-			solid = true,
-			variant = e[3] :: string,
-		})
+		table.insert(objects, { kind = "tree", rect = R(e.x, e.z, 3, 3), solid = true, variant = e.variant })
 	end
 
-	cache = {
+	local map: Map = {
 		bounds = { x0 = -hw, z0 = -hd, x1 = hw, z1 = hd },
 		ground = ground,
 		objects = objects,
 		farms = farms,
 		sellPad = R(s.X, s.Z, 6, 6),
 	}
-	return cache :: Map
+	cache = map
+	return map
 end
 
 -- Pixel helpers: world studs -> art pixels, with the world's top-left corner at (0, 0).
 function WorldMap.toPixels(x: number, z: number): (number, number)
-	return (x + Layout.WorldHalfWidth) * Layout.PixelsPerStud, (z + Layout.WorldHalfDepth) * Layout.PixelsPerStud
+	return (x + Layout.WorldHalfWidth) * Layout.PixelsPerStud,
+		(z + Layout.WorldHalfDepth) * Layout.PixelsPerStud
 end
 
 function WorldMap.pixelSize(): (number, number)

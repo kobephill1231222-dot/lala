@@ -3,7 +3,13 @@
 -- ENDESGA 32. Sorcerers are generated from their look in Config/Sorcerers (hair style, colours,
 -- accessories, streak), never drawn per id: a head per hair style, a body per pose, then the
 -- accessories and the technique glow. Characters face RIGHT; the renderer mirrors for left.
--- Also: companions, 24x24 portraits, the player (avatar colours) and the carried Orb Box.
+-- Also: companions, 24x24 portraits, the player and the carried Orb Box.
+--
+-- Colours: skin, hair and outfit snap with Palette.nearest (pale skin is Peach, like the
+-- approved mock); accents (trim, eyes, glows, orbs, bright pants) keep their hue through
+-- Parts.accent so a pastel blue trim stays blue instead of turning grey, and never land on the
+-- skin's ramp. The returned `color` is still Palette.nearest(technique colour). The player's
+-- avatar colours are snapped the same way, so every pixel is a Palette colour.
 
 local Palette = require(script.Parent.Parent.Palette)
 local Sprite = require(script.Parent.Parent.Sprite)
@@ -13,6 +19,7 @@ local Sorcerers = require(script.Parent.Parent.Parent.Config.Sorcerers)
 type Grid = Parts.Grid
 type Def = Sprite.Def
 type Rows = { string }
+type Stamp = { x: number, y: number, rows: Rows }
 
 local Characters = {}
 
@@ -23,11 +30,12 @@ local ANCHOR = { 8, 20 }
 -- Grid keys used by every Sorcerer frame (colours come from the look, see lookPalette):
 --   k outline   h/H/L hair, shade, light   z hair streak   s/S skin, shade   e eyes
 --   o/O outfit, shade   t/T trim, shade   p pants   j hands (stone for Gauntlets)
---   x/X technique colour, light   c haori coat   u orbs / halo   w white   g/G gold, light
---   m/M stone, shade   n staff wood   b bow   a/A blade, edge   v scabbard   q/r paper, seal
+--   x/X technique glow, light   c haori coat   f/F scarf, shade   u/U orbs and halo, core
+--   w white   g/G gold, light   m stone   n wood   a/A blade, edge   v scabbard
+--   q/r talisman paper, seal   b bow limbs   y bow string
 
 -- HEADS -----------------------------------------------------------------------------------
--- Rows y0..y11 at rest; the face is the same in every style.
+-- Rows from y0 at rest; the face is the same in every style, "z" marks where a streak shows.
 
 local HEADS: { [string]: Rows } = {
 	Short = {
@@ -43,14 +51,15 @@ local HEADS: { [string]: Rows } = {
 		"..kHhhSsessesk..",
 		"...kkkSsssssk...",
 	},
+	-- a sawtooth of small spikes with 1px tips (as in the mock), swept back into a rear spike
 	Spiky = {
 		"................",
-		"...kk...kk......",
-		"..khhk.khhk.....",
-		"..khhkkkhhkkkk..",
-		".khhhhhhhhhhhLk.",
-		"kHHhzhhhhhhhhk..",
+		"...k.k.kk.k.....",
+		"..khkhkhhkhk....",
+		".kkhhhhhhhhhhk..",
+		"kHhhhhhhhhhhhLk.",
 		".kHhzhhhhhhhhk..",
+		"..kHzhhhhhhhhk..",
 		"..kHhhhsshhssk..",
 		"..kHhhSskssksk..",
 		"..kHhhSsessesk..",
@@ -104,9 +113,9 @@ local HEADS: { [string]: Rows } = {
 		"..khhhhhhhhhLk..",
 		"..kHzhhhhhhhhhk.",
 		"..kHzhhhhhzzhhk.",
-		"..kHhhhhhhhzssk.",
-		"..kHhhShhhhksk..",
-		"..kHhhSshhsesk..",
+		"..kHzhhhhhhzssk.",
+		"..kHhzShhhhksk..",
+		"..kHhzSshhsesk..",
 		"...kkkSsssssk...",
 	},
 }
@@ -136,7 +145,7 @@ local HAIR_BACK: { [string]: { y: number, rows: Rows } } = {
 }
 
 -- BODIES ----------------------------------------------------------------------------------
--- Upper body rows y11..y15 (moves with the head) and legs y16..y19. The jacket is the outfit
+-- Upper body rows from y11 (moves with the head) and legs y16..y19. The jacket is the outfit
 -- with a trim placket and belt; hands are "j" so Gauntlets can turn them to stone.
 
 local UPPER: { [string]: Rows } = {
@@ -150,7 +159,7 @@ local UPPER: { [string]: Rows } = {
 	-- near fist cocked back at the hip, far hand up as a guard
 	cock = {
 		"....kkkkkkkk....",
-		"...kOoootookk...",
+		"..kkOoootookk...",
 		".kjjOoootookjk..",
 		".kjjOoootoookk..",
 		"..kkttttttttk...",
@@ -171,15 +180,23 @@ local UPPER: { [string]: Rows } = {
 		"..kjOoootooojjk.",
 		"...kttttttttkkk.",
 	},
-	-- near arm raised (the hand is the "raise" arms stamp)
+	-- near arm raised (the arm itself is an ARMS stamp drawn over the head)
 	raise = {
 		"....kkkkkkkk....",
-		"...kOoootook....",
+		"...kOoootookkkk.",
 		"..kjOoootook....",
 		"..kjOoootook....",
 		"...kttttttttk...",
 	},
-	-- both hands on a held weapon in front of the belly
+	-- both hands forward on a sword hilt, cutting down
+	cut = {
+		"....kkkkkkkkk...",
+		"...kOoootoojjk..",
+		"..kjOoootoojjk..",
+		"..kjOoootookkk..",
+		"...kttttttttk...",
+	},
+	-- both hands on a held staff in front of the belly
 	grip = {
 		"....kkkkkkkk....",
 		"...kOoootoook...",
@@ -187,13 +204,14 @@ local UPPER: { [string]: Rows } = {
 		"...kOoojjoook...",
 		"...kttttttttk...",
 	},
-	-- hands low and forward (weapon swung through)
+	-- hands low and forward (weapon swung through, punch dropped)
 	low = {
 		"....kkkkkkkk....",
 		"...kOoootoook...",
 		"..kjOoootoookk..",
 		"..kjOoootooojjk.",
 		"...kttttttttjjk.",
+		"............kk..",
 	},
 	-- bow arm forward, string hand drawn back to the chest
 	aim = {
@@ -226,8 +244,9 @@ local LEGS: { [string]: Rows } = {
 	},
 }
 
--- Arms drawn after the head (in front of the face): the near arm raised straight up.
-local ARMS: { [string]: { x: number, y: number, rows: Rows } } = {
+-- Arms drawn after the head (in front of the face).
+local ARMS: { [string]: Stamp } = {
+	-- the near arm raised straight up, open hand
 	raise = {
 		x = 12,
 		y = 4,
@@ -242,33 +261,49 @@ local ARMS: { [string]: { x: number, y: number, rows: Rows } } = {
 			"oook",
 		},
 	},
+	-- the near arm lifting a weapon: fists at y7..8, the weapon stamp sits on top of them
+	lift = {
+		x = 12,
+		y = 7,
+		rows = {
+			".kjk",
+			".kjk",
+			".kok",
+			".kok",
+			"oook",
+		},
+	},
 }
 
 -- TECHNIQUE GLOW --------------------------------------------------------------------------
--- Stamps in the technique colour (x) and its light (X), in sprite pixels at rest.
+-- Stamps in the technique colour (x) and its light (X), in sprite pixels at rest. Nothing is
+-- stamped on the shoulder row (y11) so the arm outlines stay whole.
 
-local FX: { [string]: { x: number, y: number, rows: Rows } } = {
-	charge = { x = 0, y = 12, rows = { "x..", "X..", "X..", "x.." } },
+local FX: { [string]: Stamp } = {
+	charge = { x = 0, y = 12, rows = { "x", "X", "X", "x" } },
 	impact = { x = 15, y = 11, rows = { "x", "X", "X", "x" } },
-	burst = { x = 14, y = 10, rows = { "x.", "..", ".X", ".X", "..", "x." } },
+	burst = { x = 13, y = 7, rows = { "..x", "...", ".X.", "...", "...", "...", "...", "..X", "...", ".x." } },
 	spark = { x = 15, y = 12, rows = { "x", "X", "X", "x" } },
 	orb = { x = 12, y = 0, rows = { ".xx.", "xXXx", ".xx." } },
 	release = { x = 15, y = 11, rows = { "x", "X", "X", "x" } },
-	needle = { x = 15, y = 12, rows = { "X", "x" } },
-	streak = { x = 12, y = 11, rows = { "xxxX" } },
-	swish = { x = 11, y = 11, rows = { "xxxxx" } },
+	needles = { x = 0, y = 12, rows = { "X", "x", "X" } },
+	needle = { x = 15, y = 12, rows = { "X", "X" } },
+	swish = { x = 14, y = 3, rows = { "x.", ".X", ".X", ".X", ".X", ".X", "x." } },
 }
 
 -- WEAPONS ---------------------------------------------------------------------------------
 -- Held weapons per frame, in sprite pixels at rest (the pose's hands grip them).
 
-local BLADE: { [string]: { x: number, y: number, rows: Rows } } = {
-	up = { x = 13, y = 1, rows = { ".A", ".a", ".a", ".a", ".a", ".a", ".a", ".a", "gg", ".v" } },
-	fwd = { x = 10, y = 13, rows = { "gaaaaA" } },
-	low = { x = 14, y = 15, rows = { "v.", ".a", ".a", ".A" } },
+local BLADE: { [string]: Stamp } = {
+	-- straight up from the lifted fists, guard just above them
+	up = { x = 13, y = 0, rows = { ".k.", "kAk", "kak", "kak", "kak", "kak", "kgg" } },
+	-- cutting down and forward from the hands
+	fwd = { x = 12, y = 12, rows = { ".k..", ".gk.", ".kak", "..ka", "..kA", "...k" } },
+	-- swung through, pointing at the ground
+	low = { x = 13, y = 15, rows = { ".gk", "kak", "kak", "kAk", ".k." } },
 }
 
-local STAFF: { [string]: { x: number, y: number, rows: Rows } } = {
+local STAFF: { [string]: Stamp } = {
 	rest = {
 		x = 13,
 		y = 2,
@@ -292,24 +327,53 @@ local STAFF: { [string]: { x: number, y: number, rows: Rows } } = {
 			".n.",
 		},
 	},
-	up = {
-		x = 13,
-		y = 0,
-		rows = { ".g.", "gGg", ".n.", ".n.", ".n.", ".n.", ".n.", ".n.", ".n.", ".n.", ".n.", ".n." },
-	},
+	up = { x = 13, y = 0, rows = { ".g.", "gGg", ".g.", ".n.", ".n.", ".n.", ".n." } },
 	fwd = { x = 6, y = 12, rows = { ".........g", "nnnnnnnngG", ".........g" } },
 	low = { x = 13, y = 15, rows = { "n..", ".n.", ".gg", ".gG" } },
 }
 
-local BOW: { [string]: { x: number, y: number, rows: Rows } } = {
-	rest = { x = 13, y = 10, rows = { "G.", "b.", "tb", "tb", "tb", "tb", "tb", "b." } },
-	draw = { x = 14, y = 7, rows = { "G.", "b.", "tb", "tb", "tb", "tb", "tb", "tb", "tb", "b." } },
-	loose = { x = 14, y = 7, rows = { "G.", "b.", "tb", "tb", "tb", "tb", "tb", "tb", "tb", "b." } },
-	lower = { x = 14, y = 10, rows = { "G.", "b.", "tb", "tb", "tb", "tb", "tb", "b." } },
+-- A D-shaped bow: limbs "b", string "y", a star "G" on the top tip; arrows are wood "n".
+local BOW: { [string]: Stamp } = {
+	-- carried in the near hand, string facing forward
+	rest = {
+		x = 13,
+		y = 8,
+		rows = { "..G", ".kb", ".by", "b.y", "b.y", "b.y", "b.y", "b.y", ".by", ".kb" },
+	},
+	-- drawn: the arrow along the arm, the string pulled back past the shoulder
+	draw = {
+		x = 9,
+		y = 7,
+		rows = {
+			".....G.",
+			".....bk",
+			"....y.b",
+			"...y..b",
+			"nnnnnnG",
+			"......b",
+			"......b",
+			"...y..b",
+			"....y.b",
+			".....bk",
+			".....k.",
+		},
+	},
+	-- loosed: the string snaps straight, the arrow is gone
+	loose = {
+		x = 14,
+		y = 7,
+		rows = { "G.", "bk", "yb", "yb", "yb", ".b", ".b", "yb", "yb", "bk", "k." },
+	},
+	lower = {
+		x = 13,
+		y = 9,
+		rows = { "..G", ".kb", ".by", "b.y", "b.y", "b.y", "b.y", "b.y", ".by", ".kb" },
+	},
 }
 
 -- POSES -----------------------------------------------------------------------------------
 
+type Variant = { upper: string?, arms: string?, weapon: string?, fx: string? }
 type Pose = {
 	upper: string,
 	legs: string,
@@ -318,6 +382,9 @@ type Pose = {
 	arms: string?,
 	weapon: string?, -- frame of the held weapon
 	fx: string?,
+	-- replacements when the Sorcerer holds a bow or a staff ("" clears a field)
+	bow: Variant?,
+	staff: Variant?,
 }
 
 local IDLE: { Pose } = {
@@ -329,7 +396,7 @@ local ATTACKS: { [string]: { Pose } } = {
 	Punch = {
 		{ upper = "cock", legs = "brace", dy = 1, fx = "charge" },
 		{ upper = "thrust", legs = "lunge", fx = "impact" },
-		{ upper = "thrust", legs = "lunge", fx = "burst" },
+		{ upper = "low", legs = "brace", fx = "burst" },
 	},
 	Cast = {
 		{ upper = "gather", legs = "stand", fx = "spark" },
@@ -337,13 +404,19 @@ local ATTACKS: { [string]: { Pose } } = {
 		{ upper = "thrust", legs = "lunge", fx = "release" },
 	},
 	Slash = {
-		{ upper = "thrust", legs = "brace", dy = 1, weapon = "up" },
-		{ upper = "grip", legs = "lunge", weapon = "fwd", fx = "swish" },
+		{ upper = "raise", legs = "brace", dy = 1, arms = "lift", weapon = "up" },
+		{ upper = "cut", legs = "lunge", weapon = "fwd", fx = "swish", staff = { upper = "grip" } },
 		{ upper = "low", legs = "lunge", weapon = "low" },
 	},
 	Shoot = {
-		{ upper = "aim", legs = "brace", weapon = "draw", fx = "needle" },
-		{ upper = "aim", legs = "brace", weapon = "loose", fx = "streak" },
+		{
+			upper = "cock",
+			legs = "brace",
+			dy = 1,
+			fx = "needles",
+			bow = { upper = "aim", weapon = "draw", fx = "" },
+		},
+		{ upper = "thrust", legs = "brace", fx = "needle", bow = { weapon = "loose", fx = "" } },
 		{ upper = "low", legs = "stand", weapon = "lower" },
 	},
 }
@@ -352,6 +425,15 @@ local ATTACKS: { [string]: { Pose } } = {
 
 local function has(look: { [string]: any }, accessory: string): boolean
 	return table.find(look.accessories or {}, accessory) ~= nil
+end
+
+-- Pale skin is Peach with a Sand shade (as in the approved mock), not the paper-like Cream.
+local function skinOf(c: Color3?): Color3
+	local s = Parts.snap(c, Palette.Peach)
+	if Parts.same(s, Palette.Cream) then
+		return Palette.Peach
+	end
+	return s
 end
 
 -- Snaps a colour that must stand out from the skin: when it lands on the skin's ramp, its
@@ -369,23 +451,44 @@ local function contrastSnap(c: Color3?, skin: Color3, fallback: Color3): Color3
 	return s
 end
 
+-- Near-black hair: its darker step is the Ink outline, so it shades with itself instead.
+local function isDarkHair(c: Color3): boolean
+	return Parts.same(c, Palette.Night) or Parts.same(c, Palette.DarkBrown)
+end
+
 local function lookPalette(look: { [string]: any }, techColor: Color3): { [string]: Color3 }
-	local skin = Parts.snap(look.skin, Palette.Peach)
+	local skin = skinOf(look.skin)
 	local hair = contrastSnap(look.hair, skin, Palette.Brown)
-	local outfit = Parts.snap(look.outfit, Palette.Night)
-	local trim = Parts.snap(look.trim, Palette.Red)
-	local pants = Parts.snap(look.pants, Palette.Night)
-	local eyes = if look.eyes then contrastSnap(look.eyes, skin, Palette.Ink) else Palette.Ink
-	local tech = Palette.nearest(techColor)
+	local hairShade = if isDarkHair(hair) then hair else Parts.darker(hair)
+	local hairLight = Parts.lighter(hair)
+	if Parts.same(hairLight, Palette.Peach) or Parts.same(hairLight, skin) then
+		hairLight = Palette.White
+	end
+	local outfit = Parts.hueSnap(look.outfit, Palette.Night)
+	local trim = Parts.accent(look.trim, skin, Palette.Red)
+	local pants = if look.pants and Parts.isVivid(look.pants)
+		then Parts.accent(look.pants, skin, Palette.Night)
+		else Parts.snap(look.pants, Palette.Night)
+	if Parts.same(pants, trim) then
+		pants = Parts.darker(pants) -- keep the trim belt apart from the legs
+	end
+	local eyes = Parts.accent(look.eyes, skin, Palette.Ink)
+	local glow = Parts.accent(techColor, skin, Palette.White)
 	local coat = Parts.darker(outfit)
 	if coat == Palette.Ink then
 		coat = Parts.lighter(outfit)
 	end
+	-- a scarf in the hair's colour would read as hair down to the shoulders
+	local scarf = trim
+	if Parts.same(trim, hair) or Parts.same(trim, hairShade) or Parts.same(trim, hairLight) then
+		scarf = Parts.darker(trim)
+	end
+	local orbs = Parts.accent(look.aura or look.trim or techColor, skin, glow)
 	return {
 		k = Palette.Ink,
 		h = hair,
-		H = Parts.darker(hair),
-		L = Parts.lighter(hair),
+		H = hairShade,
+		L = hairLight,
 		z = if look.hairStreak then Palette.nearest(look.hairStreak) else hair,
 		s = skin,
 		S = Parts.darker(skin),
@@ -396,33 +499,37 @@ local function lookPalette(look: { [string]: any }, techColor: Color3): { [strin
 		T = Parts.darker(trim),
 		p = pants,
 		j = skin,
-		x = tech,
-		X = Parts.lighter(tech),
+		x = glow,
+		X = Parts.glowLight(glow, skin),
 		c = coat,
-		u = Palette.nearest(look.aura or look.trim or techColor),
+		f = scarf,
+		F = Parts.darker(scarf),
+		u = orbs,
+		U = Parts.glowLight(orbs, skin),
+		V = Parts.darker(orbs),
 		w = Palette.White,
 		g = Palette.Amber,
 		G = Palette.Yellow,
 		m = Palette.Slate,
-		M = Palette.Steel,
 		n = Palette.Brown,
-		b = Palette.nearest(Color3.fromRGB(60, 50, 90)),
 		a = Palette.Mist,
 		A = Palette.White,
 		v = Palette.Dusk,
-		q = Palette.Cream,
+		q = Palette.White,
 		r = Palette.Red,
+		b = Palette.Plum,
+		y = trim,
 	}
 end
 
 -- ACCESSORIES -----------------------------------------------------------------------------
--- Each draws at rest coordinates shifted by (dx, dy) (the pose's head/upper offset). `layer`
--- is "back" (before the body), "body" (after the body, before the head) or "front".
+-- Each draws at rest coordinates shifted by the pose's offset, in one of four layers: "back"
+-- (before the body), "body" (after the body, before the head), "head" (right after the head,
+-- before raised arms) or "front" (after everything but the weapon and glow).
 
 type Ctx = {
 	g: Grid,
 	look: { [string]: any },
-	pose: Pose,
 	dx: number,
 	dy: number,
 	frame: number,
@@ -433,53 +540,71 @@ local function at(ctx: Ctx, rows: Rows, x: number, y: number)
 	Parts.stamp(ctx.g, rows, x + ctx.dx, y + ctx.dy)
 end
 
+-- Stamps only onto empty pixels (hangs behind what is already drawn).
+local function under(ctx: Ctx, rows: Rows, x: number, y: number)
+	Parts.stampUnder(ctx.g, rows, x + ctx.dx, y + ctx.dy)
+end
+
+-- Stamps over everything except the given keys (hands, sleeves and legs stay on top).
+local function over(ctx: Ctx, rows: Rows, x: number, y: number, keep: { [string]: boolean })
+	for r, row in rows do
+		for c = 1, #row do
+			local ch = string.sub(row, c, c)
+			local px, py = x + ctx.dx + c - 1, y + ctx.dy + r - 1
+			if ch ~= "." and not keep[Parts.get(ctx.g, px, py)] then
+				Parts.put(ctx.g, px, py, ch)
+			end
+		end
+	end
+end
+
+local BODY_KEYS = { j = true, o = true, O = true, t = true, p = true, m = true }
+local HAIR_KEYS = { h = true, H = true, L = true, z = true }
+
 local ACCESSORIES: { [string]: { [string]: (Ctx) -> () } } = {
 	Hood = {
-		-- the hood resting on the shoulders behind the head, drawstrings on the chest
+		-- the hood bunched behind the head, its rim across the shoulders
 		body = function(ctx)
-			at(ctx, { ".kk", "kcc", "kcc" }, 1, 9)
-			at(ctx, { "cccccccc" }, 4, 11)
-		end,
-		front = function(ctx)
-			at(ctx, { "t.t" }, 6, 12)
+			at(ctx, { "..kk", ".kcc", ".kcccccccccck", ".kk" }, 0, 9)
 		end,
 	},
 	Talismans = {
-		back = function(ctx)
+		-- paper tags with a red seal: one floating by the face, one at the back of the hip
+		front = function(ctx)
 			local bob = ctx.frame % 2
-			at(ctx, { "q", "q", "r" }, 0, 6 + bob)
-			at(ctx, { "q", "q", "r" }, 15, 8 - bob)
+			at(ctx, { ".kk.", "kqqk", "krrk", "kqqk", ".kk." }, 12, -bob)
+			over(ctx, { "kk.", "qqk", "rrk", "qqk", "kk." }, 0, 11 + bob, BODY_KEYS)
 		end,
 	},
 	Headband = {
-		front = function(ctx)
-			-- the band runs across the hair at the forehead row, wherever the hair is
-			local head = HEADS[ctx.look.hairStyle or "Short"] or HEADS.Short
-			local y = 5
-			local row = head[y + 1]
-			for x = 1, #row do
-				local ch = string.sub(row, x, x)
-				if ch == "h" or ch == "H" or ch == "z" or ch == "L" then
-					Parts.put(ctx.g, x - 1 + ctx.dx, y + ctx.dy, "t")
+		head = function(ctx)
+			-- the band runs across the forehead row wherever there is hair, knot and tails behind
+			local y = 5 + ctx.dy
+			for x = 0, W - 1 do
+				if HAIR_KEYS[Parts.get(ctx.g, x, y)] then
+					Parts.put(ctx.g, x, y, "t")
 				end
 			end
-			at(ctx, { "t", "T" }, 1, 6)
+			over(ctx, { ".kk", "ktt", "kTk", "kT.", ".k." }, 0, 4, HAIR_KEYS)
 		end,
 	},
 	Scarf = {
 		body = function(ctx)
-			at(ctx, { "tttttttt" }, 4, 11)
+			at(ctx, { "ffffffffk", "FFFFFFFF" }, 4, 11)
+			-- the tail streams back, then hangs (it never covers a hand or sleeve)
 			if ctx.frame % 2 == 1 then
-				at(ctx, { "ktt", "kT.", ".T." }, 1, 11)
+				over(ctx, { ".kk.", "kfff", "kFFk", ".kk." }, 0, 10, BODY_KEYS)
 			else
-				at(ctx, { "kttt", "kTT.", "k..." }, 0, 11)
+				over(ctx, { "..kk", ".kff", "kfFk", "kFk.", ".k.." }, 0, 10, BODY_KEYS)
 			end
 		end,
 	},
-	Gauntlets = {},
+	Gauntlets = {}, -- the hands turn to stone (see compose)
 	Sash = {
+		-- a knot on the belt and two tails hanging beside the leg (never over it)
 		front = function(ctx)
-			at(ctx, { "T", "T" }, 4, 16)
+			at(ctx, { "kT" }, 2, 15)
+			under(ctx, { "ktt", "ktT", ".kk" }, 1, 16)
 		end,
 	},
 	BellStaff = {
@@ -490,17 +615,20 @@ local ACCESSORIES: { [string]: { [string]: (Ctx) -> () } } = {
 		end,
 	},
 	Orbs = {
+		-- two floating orbs (plus shapes, light core), bobbing against the body
 		front = function(ctx)
 			local up = ctx.frame % 2
-			Parts.put(ctx.g, 0, 7 + up, "u")
-			Parts.put(ctx.g, 15, 4 + up, "u")
-			Parts.put(ctx.g, 1, 15 - up, "u")
+			Parts.stamp(ctx.g, { ".u.", "uUu", ".u." }, 13, up)
+			Parts.stamp(ctx.g, { ".u.", "uUu", ".u." }, 0, 12 - up)
 		end,
 	},
 	KatanaBack = {
-		-- scabbard across the back; the hilt shows over the far shoulder
+		-- worn across the back: the hilt over the head's back, the scabbard tip behind the hip
 		back = function(ctx)
-			at(ctx, { "..t", ".tk", "gk.", "v..", "v.." }, 0, 6)
+			if not ctx.attacking then
+				at(ctx, { "kk..", "ktk.", ".ktk", "..gg" }, 0, 0)
+			end
+			at(ctx, { ".kv", "kvk", "kvk", ".k." }, 0, 15)
 		end,
 	},
 	StarBow = {
@@ -511,37 +639,114 @@ local ACCESSORIES: { [string]: { [string]: (Ctx) -> () } } = {
 		end,
 	},
 	Haori = {
-		-- a long open coat: wide shoulders and a skirt over the thighs with a trim hem
+		-- a long open coat: the back of the jacket and the shoulders, a skirt with a trim hem
 		body = function(ctx)
-			at(ctx, { "kcck", "kc", "kc" }, 2, 11)
-			at(ctx, { "kcck", ".kc", ".kc" }, 10, 11)
-			Parts.stamp(ctx.g, { "..kccccccccck...", "..ktttttttttk..." }, 0, 16)
-		end,
-	},
-	KatanaHip = {
-		back = function(ctx)
-			at(ctx, { "vk", "v." }, 2, 15)
-		end,
-		front = function(ctx)
-			if not ctx.attacking then
-				at(ctx, { ".t", "g." }, 11, 13)
+			local g, dx, dy = ctx.g, ctx.dx, ctx.dy
+			for y = 12, 14 do
+				for x = 3, 7 do
+					local ch = Parts.get(g, x + dx, y + dy)
+					if ch == "o" or ch == "O" then
+						Parts.put(g, x + dx, y + dy, "c")
+					end
+				end
+			end
+			if Parts.get(g, 3 + dx, 12 + dy) == "k" then
+				at(ctx, { ".k", "kc" }, 2, 11)
+			end
+			if Parts.get(g, 12 + dx, 12 + dy) == "k" then
+				at(ctx, { "k.", "ck" }, 12, 11)
+			end
+			Parts.stamp(g, { "..kccccccccck...", "..ktttttttttk..." }, 0, 16)
+			for x = 3, 11 do
+				if Parts.get(g, x, 18) == "." then
+					Parts.put(g, x, 18, "k")
+				end
 			end
 		end,
 	},
-	FoxMaskSide = {
+	KatanaHip = {
+		-- at the hip pointing forward: hilt over the belt, scabbard out in front of the coat
 		front = function(ctx)
-			at(ctx, { "w.w", "www", "ttw" }, 2, 4)
+			if not ctx.attacking then
+				at(ctx, { "t.", ".t" }, 10, 13)
+			end
+			at(ctx, { "gk..", "kvk.", ".kvk", "..kv", "...k" }, 12, 15)
+		end,
+	},
+	FoxMaskSide = {
+		-- a white fox mask worn on the side of the head, eye markings in the trim colour
+		head = function(ctx)
+			at(ctx, { ".k.k.", "kwkwk", "kwwwk", "ktwtk", ".kwk.", "..k.." }, 1, 2)
 		end,
 	},
 	Halo = {
+		-- a fractured ring tilted behind the head (its front half hidden by the head)
 		back = function(ctx)
-			at(ctx, { "...uuu.uuu.." }, 2, 1)
-			at(ctx, { "u", "u", ".", "u" }, 1, 2)
+			at(ctx, {
+				"....uuu.uuuu....",
+				"..uu........uu..",
+				".u............u.",
+				".u............u.",
+				"..............u.",
+			}, 0, 0)
 		end,
 	},
 }
 
-local LAYER_ORDER = { "back", "body", "front" }
+-- Special auras from the look, drawn behind everything in sprite pixels (2 alternating frames):
+-- flame embers rising at the sides, or a void swirl around the feet.
+local AURAS: { [string]: { Rows } } = {
+	flame = {
+		{ "", "", "...............X", "", "", "x", "", "", "", "", "...............x", "", "", "X" },
+		{ "", "...............x", "", "", "X", "", "", "", "", "...............X", "", "", "x" },
+	},
+	void = {
+		{
+			"",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"...............u",
+			"",
+			"",
+			"",
+			"",
+			"u",
+			"",
+			"",
+			"",
+			"V..............V",
+			".VV..........VV.",
+		},
+		{
+			"",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"...............u",
+			"",
+			"",
+			"",
+			"",
+			"u",
+			"",
+			"",
+			"",
+			"",
+			"",
+			".V............V.",
+			"VV............VV",
+		},
+	},
+}
 
 -- COMPOSE ---------------------------------------------------------------------------------
 
@@ -562,8 +767,8 @@ local function stampWeapon(ctx: Ctx, kind: string?, frame: string?)
 	end
 	local set = if kind == "staff" then STAFF elseif kind == "bow" then BOW else BLADE
 	local w = set[frame]
-	if not w or (kind == "bow" and frame == "rest") or (kind == "staff" and frame == "rest") then
-		return
+	if not w or frame == "rest" then
+		return -- a carried staff or bow is drawn by its accessory
 	end
 	local rows = w.rows
 	if kind == "energy" then
@@ -577,15 +782,34 @@ local function stampWeapon(ctx: Ctx, kind: string?, frame: string?)
 	at(ctx, rows, w.x, w.y)
 end
 
-local function compose(look: { [string]: any }, style: string, pose: Pose, frame: number, attacking: boolean): Grid
+local function pick(variant: Variant?, field: string, default: string?): string?
+	local v = variant and (variant :: any)[field]
+	if v == "" then
+		return nil
+	end
+	return v or default
+end
+
+local function compose(
+	look: { [string]: any },
+	style: string,
+	pose: Pose,
+	frame: number,
+	attacking: boolean
+): Grid
 	local g = Parts.grid(W, H)
 	local hairStyle = look.hairStyle or "Short"
 	local head = HEADS[hairStyle] or HEADS.Short
 	local dx, dy = pose.dx or 0, pose.dy or 0
+	local kind = weaponFor(look, style)
+	local variant: Variant? = if kind == "bow" then pose.bow elseif kind == "staff" then pose.staff else nil
+	local upper = pick(variant, "upper", pose.upper) or "idle"
+	local armsName = pick(variant, "arms", pose.arms)
+	local weapon = pick(variant, "weapon", pose.weapon)
+	local fxName = pick(variant, "fx", pose.fx)
 	local ctx: Ctx = {
 		g = g,
 		look = look,
-		pose = pose,
 		dx = dx,
 		dy = dy,
 		frame = frame,
@@ -603,26 +827,40 @@ local function compose(look: { [string]: any }, style: string, pose: Pose, frame
 	end
 
 	layer("back")
+	local aura = (look.flameAura and AURAS.flame) or (look.voidAura and AURAS.void)
+	if aura then
+		Parts.stamp(g, aura[(frame - 1) % 2 + 1], 0, 0)
+	end
 	local back = HAIR_BACK[hairStyle]
 	if back then
 		Parts.stamp(g, back.rows, dx, back.y + dy)
 	end
 	Parts.stamp(g, LEGS[pose.legs], 0, 16)
-	Parts.stamp(g, UPPER[pose.upper], dx, 11 + dy)
+	Parts.stamp(g, UPPER[upper], dx, 11 + dy)
 	layer("body")
 	Parts.stamp(g, head, dx, dy)
-	local arms = pose.arms and ARMS[pose.arms]
+	layer("head")
+	local arms = armsName and ARMS[armsName]
 	if arms then
 		Parts.stamp(g, arms.rows, arms.x + dx, arms.y + dy)
 	end
 	layer("front")
-	stampWeapon(ctx, weaponFor(look, style), pose.weapon)
+	stampWeapon(ctx, kind, weapon)
 	if has(look, "Gauntlets") then
 		Parts.swap(g, "j", "m")
 	end
-	local fx = pose.fx and FX[pose.fx]
+	local fx = fxName and FX[fxName]
 	if fx then
-		Parts.stamp(g, fx.rows, fx.x + dx, fx.y + dy)
+		local rows = fx.rows
+		if has(look, "Talismans") then
+			-- the paper seal technique throws talismans: paper and seal instead of a glow
+			local out = table.create(#rows)
+			for i, row in rows do
+				out[i] = string.gsub(string.gsub(row, "x", "q"), "X", "r")
+			end
+			rows = out
+		end
+		Parts.stamp(g, rows, fx.x + dx, fx.y + dy)
 	end
 	return g
 end
@@ -659,12 +897,12 @@ function Characters.sorcerer(id: string): SorcererArt
 	end
 	local attackGrids = {}
 	for i, pose in ATTACKS[style] or ATTACKS.Punch do
-		attackGrids[i] = compose(look, style, pose, i)
+		attackGrids[i] = compose(look, style, pose, i, true)
 	end
 	local result = {
 		idle = Parts.define(id .. "Idle", idleGrids, palette, ANCHOR),
 		attack = Parts.define(id .. "Attack", attackGrids, palette, ANCHOR),
-		color = Palette.nearest(techColor),
+		color = palette.x, -- the glow drawn on the strike, so orbs and effects match it
 	}
 	sorcererCache[id] = result
 	return result
@@ -672,7 +910,8 @@ end
 
 -- PORTRAITS ------------------------------------------------------------------------------
 -- 24x24 head and shoulders facing front: the face and jacket, then the hair style and the
--- accessories that show from the front. Same keys as the Sorcerer frames (plus "y" mouth).
+-- accessories that show from the front. Same keys as the Sorcerer frames, plus "M" mouth and
+-- "R" the lit top of the shoulders (so dark jackets still read on a dark panel).
 
 local PORTRAIT_BASE: Rows = {
 	"........................",
@@ -686,22 +925,22 @@ local PORTRAIT_BASE: Rows = {
 	"....kssssssssssssssk....",
 	"....kssssssssssssssk....",
 	"....kssssssssssssssk....",
-	"...kSsskksssssskkssSk...",
-	"...kSsswesssssswessSk...",
-	"...kSsseesssssseessSk...",
-	"...kSssssssssssssssSk...",
-	"...kSsssssssyysssssSk...",
-	"....kSssssssssssssSk....",
-	".....kkSssssssssSkk.....",
-	".......kkkSSSSkkk.......",
-	"..kkkkkkkottttokkkkkkk..",
-	"..kOoooooottttoooooooOk.",
-	".kOooooooootooooooooOk..",
-	".kOoooooooottooooooooOk.",
-	".kOoooooooottooooooooOk.",
+	"....ksskkssssssskkssk...",
+	"....ksseessssssseessk...",
+	"....ksseessssssseessk...",
+	"....kssssssssssssssk....",
+	"....kssssssMMsssssssk...",
+	".....kssssssssssssk.....",
+	"......kkSSSSSSSSkk......",
+	"........kkSSSSkk........",
+	"..kkkkkkkkottokkkkkkkk..",
+	".kORRRRRRRRttRRRRRRRRk..",
+	".kOoooooooottoooooooook.",
+	".kOoooooooottoooooooook.",
+	".kOoooooooottoooooooook.",
 }
 
-local PORTRAIT_HAIR: { [string]: { back: Rows?, front: Rows } } = {
+local PORTRAIT_HAIR: { [string]: { back: { y: number, rows: Rows }?, front: Rows } } = {
 	Short = {
 		front = {
 			"........................",
@@ -712,29 +951,29 @@ local PORTRAIT_HAIR: { [string]: { back: Rows?, front: Rows } } = {
 			"..khhhhhhhhhhhhhhhhhLk..",
 			"..kHhzhhhhhhhhhhhhhhhk..",
 			"..kHhzhhhhhhhhhhhhhhhk..",
-			"..kHhhhhhhhhhhhhhhhhHk..",
-			"..kHhhhhshhhhhhhshhhHk..",
-			"..kHhhsssshhhhsssshhHk..",
-			"..kHh.............hHk...",
-			"..kHh.............hHk...",
-			"...kk.............kk....",
+			"..kHhhhhhhhhhhhhhhhhhk..",
+			"..kHhhhshhhhhhhhshhhhk..",
+			"..kHhssssshhhhsssssHhk..",
+			"..kHk..............kHk..",
+			"..kHk..............kHk..",
+			"...k................k...",
 		},
 	},
 	Spiky = {
 		front = {
-			"....k...k....k...k......",
-			"...khk.khk..khk.khk.....",
-			"..khhhkhhhkkhhhkhhhkk...",
+			"........................",
+			"....k.kk.k.kk.k.kk.k....",
+			"...khkhhkhkhhkhkhhkhk...",
 			"..khhhhhhhhhhhhhhhhhhk..",
 			".khhhhhhhhhhhhhhhhhhhLk.",
-			"kHhhhhhhhhhhhhhhhhhhhhLk",
-			".kHhzhhhhhhhhhhhhhhhhk..",
-			"kHHhzhhhhhhhhhhhhhhhhHk.",
-			".kHhhhhhhhhhhhhhhhhhHk..",
-			"..kHhhhhshhhhhhhshhhHk..",
-			"..kHhhsssshhhhsssshhHk..",
-			"..kHh.............hHk...",
-			"...kk.............kk....",
+			"kHhhhhhhhhhhhhhhhhhhhLk.",
+			".kHhzhhhhhhhhhhhhhhhhhk.",
+			"..kHzhhhhhhhhhhhhhhhhk..",
+			"..kHhhhhhhhhhhhhhhhhhk..",
+			"..kHhhhshhhhhhhhshhhhk..",
+			"..kHhssssshhhhsssssHhk..",
+			"..kHk..............kHk..",
+			"...k................k...",
 		},
 	},
 	Bob = {
@@ -745,45 +984,32 @@ local PORTRAIT_HAIR: { [string]: { back: Rows?, front: Rows } } = {
 			"....kkhhhhhhhhhhhhkk....",
 			"...khhhhhhhhhhhhhhhLk...",
 			"..khhhhhhhhhhhhhhhhhLk..",
-			".khhzhhhhhhhhhhhhhhhhhk.",
 			".kHhzhhhhhhhhhhhhhhhhhk.",
-			".kHhhhhhhhhhhhhhhhhhhHk.",
-			".kHhhhhhhhhhhhhhhhhhhHk.",
-			".kHhhh............hhHHk.",
-			".kHhh..............hHHk.",
-			".kHhh..............hHHk.",
-			".kHhh..............hHHk.",
-			".kHhh..............hHHk.",
-			".kHHh..............hHHk.",
-			".kkkkk............kkkkk.",
+			".kHhzhhhhhhhhhhhhhhhhhk.",
+			".kHhhhhhhhhhhhhhhhhhhhk.",
+			".kHhhhhhhhhhhhhhhhhhhhk.",
+			".kHhhk.............kHhk.",
+			".kHhk..............kHhk.",
+			".kHhk..............kHhk.",
+			".kHhk..............kHhk.",
+			".kHhk..............kHhk.",
+			".kHhk..............kHhk.",
+			".kkkk..............kkkk.",
 		},
 	},
 	Long = {
 		back = {
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			".kHhh..............hHHk.",
-			".kHhhk............khHHk.",
-			".kHhhk............khHHk.",
-			".kHhhk............khHHk.",
-			".kHhhk............khHHk.",
-			".kHhhk............khHHk.",
-			".kHhk..............kHHk.",
-			".kHhk..............kHHk.",
-			".kHhk..............kHHk.",
+			y = 16,
+			rows = {
+				".kHhk..............kHhk.",
+				".kHhk..............kHhk.",
+				".kHhk..............kHhk.",
+				".kHhk..............kHhk.",
+				".kHhk..............kHhk.",
+				".kHhk..............kHhk.",
+				".kHhk..............kHhk.",
+				".kHhk..............kHhk.",
+			},
 		},
 		front = {
 			"........................",
@@ -792,44 +1018,43 @@ local PORTRAIT_HAIR: { [string]: { back: Rows?, front: Rows } } = {
 			"....kkhhhhhhhhhhhhkk....",
 			"...khhhhhhhhhhhhhhhLk...",
 			"..khhhhhhhhhhhhhhhhhLk..",
-			".khhzhhhhhhhhhhhhhhhhhk.",
 			".kHhzhhhhhhhhhhhhhhhhhk.",
-			".kHhhhhhhhhhhhhhhhhhhHk.",
-			".kHhhhhshhhhhhhshhhhHHk.",
-			".kHhhsssshhhhsssshhhHHk.",
-			".kHhh..............hHHk.",
-			".kHhh..............hHHk.",
-			".kHhh..............hHHk.",
-			".kHhh..............hHHk.",
+			".kHhzhhhhhhhhhhhhhhhhhk.",
+			".kHhhhhhhhhhhhhhhhhhhhk.",
+			".kHhhhhshhhhhhhhshhhhhk.",
+			".kHhhssssshhhhssssshhhk.",
+			".kHhk..............kHhk.",
+			".kHhk..............kHhk.",
+			".kHhk..............kHhk.",
+			".kHhk..............kHhk.",
+			".kHhk..............kHhk.",
 		},
 	},
 	Ponytail = {
 		back = {
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"........................",
-			"...........kkk..........",
-			"..........khhhk.........",
-			"........................",
+			y = 14,
+			rows = {
+				"khk",
+				"khk",
+				"khk",
+				"kk",
+			},
 		},
 		front = {
 			"........................",
-			"..........kkkk..........",
-			"......kkkkttttkkkk......",
-			"....kkhhhhkttkhhhhkk....",
+			"........................",
+			"......kkkkkkkkkkkk......",
+			"....kkhhhhhhhhhhhhkk....",
 			"...khhhhhhhhhhhhhhhLk...",
 			"..khhhhhhhhhhhhhhhhhLk..",
-			"..kHhzhhhhhhhhhhhhhhhk..",
-			"..kHhzhhhhhhhhhhhhhhhk..",
-			"..kHhhhhhhhhhhhhhhhhHk..",
-			"..kHhhhhshhhhhhhshhhHk..",
-			"..kHhhsssshhhhsssshhHk..",
-			"..kHh.............hHk...",
-			"..kHh.............hHk...",
-			"...kk.............kk....",
+			"kkkHhzhhhhhhhhhhhhhhhk..",
+			"kttkhzhhhhhhhhhhhhhhhk..",
+			"kttkhhhhhhhhhhhhhhhhhk..",
+			"kkHhhhhshhhhhhhhshhhhk..",
+			"khkHhssssshhhhsssssHhk..",
+			"khkHk..............kHk..",
+			"khkHk..............kHk..",
+			"khkk................k...",
 		},
 	},
 	Swept = {
@@ -842,260 +1067,180 @@ local PORTRAIT_HAIR: { [string]: { back: Rows?, front: Rows } } = {
 			"..khhhhhhhhhhhhhhhhhLk..",
 			"..kHhzhhhhhhhhhhhhhhhk..",
 			"..kHhzhhhhhhhhzzhhhhhk..",
-			"..kHhhhhhhhhhhhzzhhhHk..",
-			"..kHhhsshhhhhhhhzzhhHk..",
-			"..kHhsssshhhhhhhhzhhHk..",
-			"..kHh..........hhhhhHk..",
-			"..kHh............hhhHk..",
-			"...kk.............kkk...",
+			"..kHhhhhhhhhhhhzzhhhhk..",
+			"..kHhhhhhhhhhhhhzzhhhk..",
+			"..kHhssssshhhhhhhzhhhk..",
+			"..kHk.........hhhhhhHk..",
+			"..kHk...........hhhhHk..",
+			"...k..............kkk...",
 		},
 	},
 }
 
-local PORTRAIT_ACCESSORIES: { [string]: { back: Rows?, front: Rows? } } = {
-	Hood = {
-		back = {
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"..kkk..............kkk..",
-			".kcccck..........kcccck.",
-			".kccccckkk....kkkccccck.",
+local PORTRAIT_ACCESSORIES: { [string]: { back: { y: number, rows: Rows }?, front: { y: number, rows: Rows }? } } =
+	{
+		Hood = {
+			back = {
+				y = 16,
+				rows = {
+					"..kkk..............kkk..",
+					".kcccck..........kcccck.",
+					".kccccckkk....kkkccccck.",
+				},
+			},
+			front = {
+				y = 20,
+				rows = {
+					"........t......t........",
+					"........t......t........",
+				},
+			},
 		},
-		front = {
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"..........t..t..........",
-			"..........t..t..........",
+		Talismans = {
+			front = {
+				y = 9,
+				rows = {
+					".kk.",
+					"kqqk",
+					"krrk",
+					"kqqk",
+					".kk.",
+					"",
+					"",
+					"....................kk.",
+					"...................kqqk",
+					"...................krrk",
+					"...................kqqk",
+				},
+			},
 		},
-	},
-	Talismans = {
-		front = {
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"qq",
-			"qq",
-			"rr",
-			"qq",
-			"",
-			"",
-			"......................qq",
-			"......................qq",
-			"......................rr",
-			"......................qq",
+		Headband = {
+			front = {
+				y = 6,
+				rows = {
+					"..kttttttttttttttttttk..",
+					".tT",
+					"tT",
+				},
+			},
 		},
-	},
-	Headband = {
-		front = {
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"..kttttttttttttttttttk..",
-			".tT",
-			"tT",
+		Scarf = {
+			front = {
+				y = 18,
+				rows = {
+					"......kffffffffffk......",
+					".....kffffffffffffk.....",
+					"......kkkkkFFkkkkk......",
+					"..........kFFk..........",
+					"..........kFkk..........",
+				},
+			},
 		},
-	},
-	Scarf = {
-		front = {
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"......kttttttttttk......",
-			".....kttttttttttttk.....",
-			"......kkkkkTTkkkkk......",
-			"...........TT...........",
-			"...........Tk...........",
+		BellStaff = {
+			back = {
+				y = 1,
+				rows = {
+					"....................kgk.",
+					"...................kgGgk",
+					"....................kgk.",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+					".....................n",
+				},
+			},
 		},
-	},
-	BellStaff = {
-		back = {
-			"",
-			"....................kgk.",
-			"...................kgGgk",
-			"....................kgk.",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
-			".....................n",
+		Orbs = {
+			front = {
+				y = 0,
+				rows = {
+					".u...................u..",
+					"uUu.................uUu.",
+					".u...................u..",
+				},
+			},
 		},
-	},
-	Orbs = {
-		front = {
-			"",
-			"",
-			"",
-			"",
-			"uu",
-			"uu",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"......................uu",
-			"......................uu",
+		KatanaBack = {
+			front = {
+				y = 13,
+				rows = {
+					"......................kk",
+					".....................ktk",
+					".....................ktk",
+					"....................kggk",
+					"....................kvk.",
+					"...................kvk..",
+				},
+			},
 		},
-	},
-	KatanaBack = {
-		back = {
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"kt",
-			"ktk",
-			".ggk",
-			"..vk",
+		StarBow = {
+			back = {
+				y = 0,
+				rows = {
+					".....................kGk",
+					"....................kGGG",
+					".....................kbk",
+					"......................kb",
+					"......................kb",
+					"......................kb",
+					"......................kb",
+					"......................kb",
+					"......................kb",
+					"......................kb",
+					"......................kb",
+					"......................kb",
+					".....................kbk",
+				},
+			},
 		},
-	},
-	StarBow = {
-		back = {
-			"",
-			"",
-			"",
-			"",
-			"",
-			".....................G..",
-			"....................GGG.",
-			".....................b..",
-			"....................tb..",
-			"....................t.b.",
-			"....................t.b.",
-			"....................t.b.",
-			"....................t.b.",
-			"....................t.b.",
-			"....................t.b.",
-			"....................tb..",
-			".....................b..",
+		Haori = {
+			front = {
+				y = 19,
+				rows = {
+					"..kkkkkkk......kkkkkkk..",
+					"..kccccccct..tccccccck..",
+					".kccccccccct.tcccccccck.",
+					".kccccccccct.tcccccccck.",
+					".kccccccccct.tcccccccck.",
+				},
+			},
 		},
-	},
-	Haori = {
-		front = {
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"..kkkkkkk......kkkkkkk..",
-			"..kccccccct..tccccccck..",
-			".kccccccccct.tcccccccck.",
-			".kccccccccct.tcccccccck.",
-			".kccccccccct.tcccccccck.",
+		FoxMaskSide = {
+			front = {
+				y = 4,
+				rows = {
+					".k.k.",
+					"kwkwk",
+					"kwwwk",
+					"ktwtk",
+					"kwwwk",
+					".kwk.",
+					"..k..",
+				},
+			},
 		},
-	},
-	FoxMaskSide = {
-		front = {
-			"",
-			"",
-			"k...k",
-			"wk.kw",
-			"wwkww",
-			"wwwww",
-			"twwwt",
-			"wwwww",
-			".www",
+		Halo = {
+			back = {
+				y = 0,
+				rows = {
+					".....uuuuuu..uuuuuu.....",
+					"...uu..............uu...",
+					"..u..................u..",
+				},
+			},
 		},
-	},
-	Halo = {
-		back = {
-			"....uuuuuu..uuuuuu......",
-			"..uu..............uu....",
-			".u..................u...",
-		},
-	},
-}
+	}
 
 local portraitCache: { [string]: Def } = {}
 
@@ -1108,29 +1253,26 @@ function Characters.portrait(id: string): Def
 	local def = Sorcerers.get(id)
 	local look = if def then def.look else GENERIC_LOOK
 	local palette = lookPalette(look, if def then def.color else GENERIC_COLOR)
-	palette.y = Palette.Rust
+	palette.M = Palette.Rust
+	palette.R = Parts.lighter(palette.o)
 	local g = Parts.grid(24, 24)
 	local hair = PORTRAIT_HAIR[look.hairStyle or "Short"] or PORTRAIT_HAIR.Short
 	local accessories = look.accessories or {}
 	for _, a in accessories do
 		local acc = PORTRAIT_ACCESSORIES[a]
 		if acc and acc.back then
-			Parts.stamp(g, acc.back, 0, 0)
+			Parts.stamp(g, acc.back.rows, 0, acc.back.y)
 		end
 	end
 	if hair.back then
-		Parts.stamp(g, hair.back, 0, 0)
+		Parts.stamp(g, hair.back.rows, 0, hair.back.y)
 	end
 	Parts.stamp(g, PORTRAIT_BASE, 0, 0)
 	Parts.stamp(g, hair.front, 0, 0)
-	if look.hairStyle == "Swept" then
-		-- the swept fringe hides the right eye
-		Parts.fill(g, 15, 11, 3, 3, "h")
-	end
 	for _, a in accessories do
 		local acc = PORTRAIT_ACCESSORIES[a]
 		if acc and acc.front then
-			Parts.stamp(g, acc.front, 0, 0)
+			Parts.stamp(g, acc.front.rows, 0, acc.front.y)
 		end
 	end
 	local result = Parts.define(id .. "Portrait", { g }, palette, { 12, 24 })
@@ -1139,11 +1281,13 @@ function Characters.portrait(id: string): Def
 end
 
 -- COMPANIONS -----------------------------------------------------------------------------
--- Spirits that sit or float beside their Sorcerer (colours from the old 3D models, snapped).
--- 2 idle frames, at most 14x14, anchor bottom middle.
+-- Spirits that sit or float beside their Sorcerer (colours from the old 3D models, snapped;
+-- neon parts keep their hue). Light comes from the top right. 2 idle frames, at most 14x14,
+-- anchor bottom middle.
 
 local rgb = Color3.fromRGB
 local snap = Palette.nearest
+local vivid = Parts.vivid
 
 local COMPANIONS: { [string]: { palette: { [string]: Color3 }, frames: { Rows } } } = {
 	-- a squat toad in a straw hat; it puffs its throat
@@ -1165,9 +1309,9 @@ local COMPANIONS: { [string]: { palette: { [string]: Color3 }, frames: { Rows } 
 				"...kaaaaak....",
 				".kkAAAAAAAkk..",
 				"kaaaaaaaaaaak.",
-				".kkgGgggykykk.",
-				".kgGggggyky.k.",
-				"kdgggggggggggk",
+				".kkggggGykykk.",
+				".kgggggGyky.k.",
+				"kdggggggggGGgk",
 				"kdgkkkkkkkkkgk",
 				"kdgccccccccggk",
 				".kdgcccccdggk.",
@@ -1181,8 +1325,8 @@ local COMPANIONS: { [string]: { palette: { [string]: Color3 }, frames: { Rows } 
 				"...kaaaaak....",
 				".kkAAAAAAAkk..",
 				"kaaaaaaaaaaak.",
-				".kgGggggkkkk..",
-				"kdgGgggggggggk",
+				".kggggGgkkkk..",
+				"kdgggggGgGGggk",
 				"kdgkkkkkkkkkgk",
 				"kdgcccccccccgk",
 				"kdgcccccccccgk",
@@ -1196,8 +1340,7 @@ local COMPANIONS: { [string]: { palette: { [string]: Color3 }, frames: { Rows } 
 		palette = {
 			k = Palette.Ink,
 			b = snap(rgb(70, 74, 104)),
-			a = snap(rgb(170, 220, 255)),
-			A = snap(rgb(90, 130, 220)),
+			a = vivid(rgb(170, 220, 255)),
 			w = snap(rgb(220, 250, 255)),
 		},
 		frames = {
@@ -1207,11 +1350,11 @@ local COMPANIONS: { [string]: { palette: { [string]: Color3 }, frames: { Rows } 
 				"kk...kbbk...kk",
 				"kaak.kwwk.kaak",
 				"kaaakkbbkkaaak",
-				"kAaaakbbkaaaAk",
-				".kAaakbbkaaAk.",
+				"kaaaakbbkaaaak",
+				".kaaakbbkaaak.",
 				"..kkkkbbkkkk..",
 				".kaaakbbkaaak.",
-				".kAak.kk.kaAk.",
+				".kaak.kk.kaak.",
 				"..kk......kk..",
 				"..............",
 			},
@@ -1222,10 +1365,10 @@ local COMPANIONS: { [string]: { palette: { [string]: Color3 }, frames: { Rows } 
 				".....kbbk.....",
 				"..kkkkwwkkkk..",
 				".kaaakbbkaaak.",
-				"kAaaakbbkaaaAk",
-				"kAAakkbbkkaAAk",
+				"kaaaakbbkaaaak",
+				"kaaakkbbkkaaak",
 				".kkkakbbkakkk.",
-				"...kAkkkkAk...",
+				"...kakkkkak...",
 				"....k....k....",
 				"..............",
 			},
@@ -1236,131 +1379,129 @@ local COMPANIONS: { [string]: { palette: { [string]: Color3 }, frames: { Rows } 
 		palette = {
 			k = Palette.Ink,
 			w = snap(rgb(238, 232, 222)),
-			W = Palette.Mist,
 			r = snap(rgb(196, 40, 60)),
 			e = snap(rgb(255, 80, 110)),
 			c = Palette.Night,
-			C = Palette.Dusk,
 		},
 		frames = {
 			{
 				".k........k.",
 				"kwk......kwk",
 				"kwwkkkkkkwwk",
-				".kwwwwwwwwk.",
-				"kwrwwwwwwrwk",
-				"kwkekwwkekWk",
-				"kwwwwwwwwwWk",
-				"kwkkkkkkkkWk",
-				"kWkwkwwkwkWk",
-				".kWwwwwwwWk.",
-				"..kkccccck..",
-				".kcCccccCck.",
-				".kccckcccck.",
-				"..kck.kck...",
+				"kwwwwwwwwwwk",
+				"kwrrwwwwrrwk",
+				"kwkekwwkekwk",
+				"kwwwwwwwwwwk",
+				"kwkkkkkkkkwk",
+				"kwkwkkkkwkwk",
+				".kkwwwwwwkk.",
+				"..kkkkkkkk..",
+				"..kccccccck.",
+				"..kckcckck..",
+				"...k.kk.k...",
 			},
 			{
 				"............",
 				".k........k.",
 				"kwk......kwk",
 				"kwwkkkkkkwwk",
-				".kwwwwwwwwk.",
-				"kwrwwwwwwrwk",
-				"kwkekwwkekWk",
-				"kwwwwwwwwwWk",
-				"kwkkkkkkkkWk",
-				"kWkwkwwkwkWk",
-				".kWwwwwwwWk.",
-				"..kkccccck..",
-				".kcCcccccck.",
-				"..kckkckck..",
+				"kwwwwwwwwwwk",
+				"kwrrwwwwrrwk",
+				"kwkekwwkekwk",
+				"kwwwwwwwwwwk",
+				"kwkkkkkkkkwk",
+				"kwkwkkkkwkwk",
+				".kkwwwwwwkk.",
+				"..kkkkkkkk..",
+				".kccccccck..",
+				"..kckkckk...",
 			},
 		},
 	},
-	-- a pale wolf with yellow lightning marks, sitting; its tail wags
+	-- a pale wolf with yellow lightning marks, standing; its tail wags
 	Wolf = {
 		palette = {
 			k = Palette.Ink,
 			f = snap(rgb(236, 232, 214)),
 			F = Palette.Slate,
 			y = snap(rgb(255, 214, 60)),
-			e = snap(rgb(120, 220, 255)),
+			e = vivid(rgb(120, 220, 255)),
 		},
 		frames = {
 			{
-				"..........k.k.",
-				".........kykyk",
-				"........kfffffk",
-				"........kffekfk",
-				"........kffffkk",
-				"......kkffffk..",
-				"..k..kfffffk...",
-				".kyk.kfyFffk...",
-				".kfk.kffyfFk...",
-				"..kfkkFfffFk...",
-				"...kFfFfFFfk...",
-				"...kffkkfffkk..",
-				"...kkk..kkkkk..",
+				"........k.k...",
+				".......kykyk..",
+				".......kffffk.",
+				".......kfefffk",
+				".......kffffkk",
+				"kk....kfffk...",
+				"kyk..kffffk...",
+				".kfkkfffffk...",
+				"..kffyfffyfk..",
+				"..kFFFFFFFFk..",
+				"..kfk.kfk.kfk.",
+				"..kkk.kkk.kkk.",
 			},
 			{
-				"..........k.k.",
-				".........kykyk",
-				"........kfffffk",
-				"........kffekfk",
-				"........kffffkk",
-				"......kkffffk..",
-				".....kfffffk...",
-				".....kfyFffk...",
-				"kk...kffyfFk...",
-				"kykkkkFfffFk...",
-				".kffFfFfFFfk...",
-				"..kkfkkkfffkk..",
-				"...kkk..kkkkk..",
+				"........k.k...",
+				".......kykyk..",
+				".......kffffk.",
+				".......kfefffk",
+				".......kffffkk",
+				"......kfffk...",
+				"kkk..kffffk...",
+				"kyfkkfffffk...",
+				".kkffyfffyfk..",
+				"..kFFFFFFFFk..",
+				"..kfk.kfk.kfk.",
+				"..kkk.kkk.kkk.",
 			},
 		},
 	},
-	-- a coiled serpent with cracks of light and a horned head; it sways
+	-- a coiled serpent: tapering coils with cracks of light, an S-curved neck and a horned
+	-- wedge of a head flicking its tongue; it sways
 	Serpent = {
 		palette = {
 			k = Palette.Ink,
 			b = snap(rgb(48, 40, 62)),
-			B = Palette.Dusk,
-			v = snap(rgb(186, 90, 255)),
+			B = Palette.Steel,
+			v = vivid(rgb(186, 90, 255)),
 			h = snap(rgb(220, 210, 230)),
-			e = snap(rgb(255, 70, 120)),
+			e = Palette.Hot,
+			r = Palette.Rose,
 		},
 		frames = {
 			{
-				".......h.h....",
-				"......kkkkk...",
-				".....kbbbbbkk.",
-				".....kbbekbbk.",
-				"......kbbbkkk.",
-				"...kkk.kbbk...",
-				"..kbbBkkbbk...",
-				"..kbvkbbbbk...",
-				"..kbbbbkkk....",
-				".kkkkkkbbbkk..",
-				"kbbvbbbbvbbbk.",
-				"kBbbbbbbbbbBk.",
-				".kbbbvbbbbbk..",
-				"..kkkkkkkkk...",
+				"........h.h...",
+				".......khkhk..",
+				"......kBBBBBk.",
+				"......kbbbebkr",
+				".......kbbbkk.",
+				"........kbbk..",
+				".......kbbk...",
+				"....kkkbbk....",
+				"...kBBBBbbkk..",
+				"..kbbvbbbbbBk.",
+				"..kkkkkkkkbbk.",
+				".kBBBBBBBBkbbk",
+				"kbbbvbbbbvbbbk",
+				".kkkkkkkkkkkk.",
 			},
 			{
-				"......h.h.....",
-				".....kkkkk....",
-				"....kbbbbbkk..",
-				"....kbbekbbk..",
-				".....kbbbkkk..",
-				"...kkkkbbk....",
-				"..kbbBkbbk....",
-				"..kbvkbbbbk...",
-				"..kbbbbkkk....",
-				".kkkkkkbbbkk..",
-				"kbbvbbbbvbbbk.",
-				"kBbbbbbbbbbBk.",
-				".kbbbvbbbbbk..",
-				"..kkkkkkkkk...",
+				".......h.h....",
+				"......khkhk...",
+				".....kBBBBBk..",
+				".....kbbbebk..",
+				"......kbbbk...",
+				".......kbbk...",
+				"........kbbk..",
+				"....kkkkbbk...",
+				"...kBBBBbbkk..",
+				"..kbbbbvbbbBk.",
+				"..kkkkkkkkbbk.",
+				".kBBBBBBBBkbbk",
+				"kbbbbbvbbbbvbk",
+				".kkkkkkkkkkkk.",
 			},
 		},
 	},
@@ -1394,8 +1535,8 @@ function Characters.companion(name: string): Def?
 end
 
 -- PLAYER ----------------------------------------------------------------------------------
--- The local player and other players: a plain T-shirt chibi in their avatar colours (not
--- snapped), short hair, three directions with a 2-step walk.
+-- The local player and other players: a plain T-shirt chibi in their avatar colours (snapped
+-- into the palette like everything else), short hair, three directions with a 2-step walk.
 
 local PLAYER_HEAD: { [string]: Rows } = {
 	down = {
@@ -1407,8 +1548,8 @@ local PLAYER_HEAD: { [string]: Rows } = {
 		"..kHhhhhhhhhHk..",
 		"..kHhhhhhhhhHk..",
 		"..kHhsshhsshHk..",
-		"..khsksssksshk..",
-		"..khsksssksshk..",
+		"..khsksssskshk..",
+		"..khsksssskshk..",
 		"...kssssssssk...",
 	},
 	up = {
@@ -1449,7 +1590,7 @@ local PLAYER_BODY: { [string]: { upper: Rows, legs: { Rows } } } = {
 			".kskppppppppksk.",
 		},
 		legs = {
-			{ "...kppppppppk...", "...kpppkkpppk...", "...kpppkkpppk...", "...kkkkk.kkkk..." },
+			{ "...kppppppppk...", "...kpppkkpppk...", "...kpppkkpppk...", "...kkkk..kkkk..." },
 			{ "...kppppppppk...", "...kpppkkpppk...", "...kkkkkkpppk...", "...kkkk..kkkk..." },
 			{ "...kppppppppk...", "...kpppkkpppk...", "...kpppkkkkkk...", "...kkkk..kkkk..." },
 		},
@@ -1463,7 +1604,7 @@ local PLAYER_BODY: { [string]: { upper: Rows, legs: { Rows } } } = {
 			".kskppppppppksk.",
 		},
 		legs = {
-			{ "...kppppppppk...", "...kpppkkpppk...", "...kpppkkpppk...", "...kkkkk.kkkk..." },
+			{ "...kppppppppk...", "...kpppkkpppk...", "...kpppkkpppk...", "...kkkk..kkkk..." },
 			{ "...kppppppppk...", "...kpppkkpppk...", "...kkkkkkpppk...", "...kkkk..kkkk..." },
 			{ "...kppppppppk...", "...kpppkkpppk...", "...kpppkkkkkk...", "...kkkk..kkkk..." },
 		},
@@ -1476,23 +1617,25 @@ local PLAYER_BODY: { [string]: { upper: Rows, legs: { Rows } } } = {
 			"...kOoooooosok..",
 			"...kpppppppkk...",
 		},
+		-- stand, then the two strides; the far leg is the darker one
 		legs = {
-			{ "....kppppppk....", "....kppkkppk....", "....kppkkppk....", "....kkkk.kkkk..." },
-			{ "....kppppppk....", "...kppk.kppk....", "..kppk...kppk...", "..kkkk...kkkkk.." },
-			{ "....kppppppk....", ".....kppppk.....", ".....kkppkk.....", ".....kkkkkk....." },
+			{ "....kppppppk....", "....kPPkkppk....", "....kPPkkppk....", "....kkkk.kkkk..." },
+			{ "....kppppppk....", "...kppk.kPPk....", "..kppk...kPPk...", "..kkkk...kkkkk.." },
+			{ "....kppppppk....", "...kPPk.kppk....", "..kPPk...kppk...", "..kkkk...kkkkk.." },
 		},
 	},
 }
 
--- Walk frames: the upper body bobs up on the passing steps.
-local PLAYER_BOB = { 0, -1, -1 }
+-- Upper body offset per frame: down a pixel at rest and on the second stride, so walking
+-- bobs once per step pair.
+local PLAYER_BOB = { 1, 0, 1 }
 
 local function playerDef(dir: string, palette: { [string]: Color3 }): Def
 	local grids = {}
 	local body = PLAYER_BODY[dir]
 	for i = 1, 3 do
 		local g = Parts.grid(W, H)
-		local bob = PLAYER_BOB[i] + 1
+		local bob = PLAYER_BOB[i]
 		Parts.stamp(g, body.legs[i], 0, 16)
 		Parts.stamp(g, body.upper, 0, 11 + bob)
 		Parts.stamp(g, PLAYER_HEAD[dir], 0, bob)
@@ -1501,21 +1644,32 @@ local function playerDef(dir: string, palette: { [string]: Color3 }): Def
 	return Parts.define("Player" .. dir, grids, palette, ANCHOR)
 end
 
+local function shadeOf(c: Color3): Color3
+	local d = Parts.darker(c)
+	return if d == Palette.Ink then c else d
+end
+
 -- Player sprites in avatar colours: { down, up, side }, 3 frames each (stand, walk A, walk B).
 function Characters.player(colors: { skin: Color3, shirt: Color3, pants: Color3, hair: Color3 }): {
 	down: Def,
 	up: Def,
 	side: Def,
 }
+	local skin = skinOf(colors.skin)
+	local shirt = Parts.snap(colors.shirt, Palette.Sky)
+	local pants = Parts.snap(colors.pants, Palette.Dusk)
+	local hair = Parts.snap(colors.hair, Palette.Brown)
 	local palette = {
 		k = Palette.Ink,
-		s = colors.skin,
-		S = Palette.shade(colors.skin, 0.18),
-		o = colors.shirt,
-		O = Palette.shade(colors.shirt, 0.3),
-		p = colors.pants,
-		h = colors.hair,
-		H = Palette.shade(colors.hair, 0.3),
+		s = skin,
+		S = Parts.darker(skin),
+		o = shirt,
+		O = shadeOf(shirt),
+		p = pants,
+		P = shadeOf(pants),
+		h = hair,
+		-- very dark hair would vanish into the outline: its side locks go one step lighter
+		H = if isDarkHair(hair) then Parts.lighter(hair) else Parts.darker(hair),
 	}
 	return {
 		down = playerDef("down", palette),

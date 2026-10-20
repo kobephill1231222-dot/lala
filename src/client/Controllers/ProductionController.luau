@@ -18,6 +18,7 @@ local Palette = require(Shared.Pixel.Palette)
 local Sprite = require(Shared.Pixel.Sprite)
 local Fx = require(Shared.Pixel.Art.Fx)
 local WorldArt = require(Shared.Pixel.Art.World)
+local Characters = require(Shared.Pixel.Art.Characters)
 local Pixel = script.Parent.Parent:WaitForChild("Pixel")
 local Screen = require(Pixel.Screen)
 local Camera2D = require(Pixel.Camera2D)
@@ -36,6 +37,7 @@ type Worker = {
 	slot: number,
 	id: string,
 	def: any,
+	color: Color3, -- the technique glow drawn on the sprite (orbs and effects use it too)
 	timer: number,
 	anim: number, -- seconds into the technique (-1 = idle)
 	phase: number,
@@ -86,7 +88,12 @@ function ProductionController.boxOf(model: Instance?): (number, number, number, 
 end
 
 local function colorKey(c: Color3): string
-	return string.format("%02x%02x%02x", math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5))
+	return string.format(
+		"%02x%02x%02x",
+		math.floor(c.R * 255 + 0.5),
+		math.floor(c.G * 255 + 0.5),
+		math.floor(c.B * 255 + 0.5)
+	)
 end
 
 local function getOrb(color: Color3): (Frame, string)
@@ -142,7 +149,7 @@ end
 local function techniqueFx(farm: any, worker: Worker, sx: number, sy: number, dir: number)
 	local effects = registry.EffectsController
 	local here = Camera2D.toWorld(sx, sy)
-	local color = worker.def.color
+	local color = worker.color
 	local style = worker.def.style
 	if style == "Punch" then
 		effects.ring(here + Vector3.new(dir * 2, 0, -2), color, 1, 4, 0.3)
@@ -157,7 +164,7 @@ local function techniqueFx(farm: any, worker: Worker, sx: number, sy: number, di
 end
 
 local function spawnOrb(farm: any, worker: Worker, sx: number, sy: number, dir: number)
-	local sprite, key = getOrb(worker.def.color)
+	local sprite, key = getOrb(worker.color)
 	local laneX = farm.lane.x + farm.lane.w / 2
 	local orb: Orb = {
 		sprite = sprite,
@@ -214,7 +221,9 @@ local function stepFarm(farm: any, dt: number)
 	farm.boxFill.Position = UDim2.fromOffset(inner.x, top)
 	farm.boxFill.Size = UDim2.fromOffset(inner.w, h)
 	if full then
-		farm.boxFill.BackgroundColor3 = if math.floor(clock * 4) % 2 == 0 then Palette.Amber else Palette.Yellow
+		farm.boxFill.BackgroundColor3 = if math.floor(clock * 4) % 2 == 0
+			then Palette.Amber
+			else Palette.Yellow
 	else
 		farm.boxFill.BackgroundColor3 = if state.pulse > 0.5 then Palette.Rose else Palette.Orchid
 	end
@@ -233,6 +242,7 @@ local function stepFarm(farm: any, dt: number)
 				slot = slot,
 				id = id,
 				def = def,
+				color = Characters.sorcerer(id).color,
 				timer = math.random() * 1.2,
 				anim = -1,
 				phase = math.random() * 2,
@@ -281,7 +291,14 @@ local function stepFarm(farm: any, dt: number)
 	end
 end
 
-local function arc(ax: number, ay: number, bx: number, by: number, t: number, height: number): (number, number)
+local function arc(
+	ax: number,
+	ay: number,
+	bx: number,
+	by: number,
+	t: number,
+	height: number
+): (number, number)
 	return ax + (bx - ax) * t, ay + (by - ay) * t - height * 4 * t * (1 - t)
 end
 

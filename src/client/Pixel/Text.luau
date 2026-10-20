@@ -7,7 +7,8 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Palette = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Pixel"):WaitForChild("Palette"))
+local Palette =
+	require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Pixel"):WaitForChild("Palette"))
 
 local Text = {}
 
@@ -30,7 +31,15 @@ function Text.width(text: string, size: number?): number
 	return (utf8.len(text) or #text) * (size or 8)
 end
 
-local function label(parent: Instance?, text: string, color: Color3, size: number, align: Enum.TextXAlignment, width: number, z: number): TextLabel
+local function label(
+	parent: Instance?,
+	text: string,
+	color: Color3,
+	size: number,
+	align: Enum.TextXAlignment,
+	width: number,
+	z: number
+): TextLabel
 	local l = Instance.new("TextLabel")
 	l.BackgroundTransparency = 1
 	l.BorderSizePixel = 0
@@ -53,7 +62,7 @@ end
 
 -- A text line with a shadow. Returns the holder Frame (position it) and the main label.
 function Text.new(parent: Instance?, text: string, options: Options?): (Frame, TextLabel)
-	local o = options or {}
+	local o: Options = options or {}
 	local size = o.size or Text.Size
 	local width = o.width or ((utf8.len(text) or #text) * size)
 	local align = o.align or Enum.TextXAlignment.Left

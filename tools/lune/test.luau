@@ -11,6 +11,8 @@ local specs = {
 	require("../../tests/rules.spec"),
 	require("../../tests/data.spec"),
 	require("../../tests/world.spec"),
+	require("../../tests/art_characters.spec"),
+	require("../../tests/art_world.spec"),
 }
 
 for _, spec in specs do

@@ -1,7 +1,8 @@
 --!strict
 -- 10x10 pixel icons for the HUD, menus, panels and world prompts: cash, orbs, locks, menu
 -- buttons, one per farm upgrade and one gem per rarity. Each is a text grid (some stamped
--- together from smaller pieces) with a dark 1px outline so it reads on any panel.
+-- together from smaller pieces) with a 1px Ink outline so it reads on any panel; coloured
+-- tones are only used inside.
 
 local Palette = require(script.Parent.Parent.Palette)
 local Sprite = require(script.Parent.Parent.Sprite)
@@ -41,11 +42,11 @@ end
 
 -- A green "+" badge, stamped in the bottom-right corner of the "more of something" upgrades.
 local PLUS = {
-	".DDD.",
-	"DDLDD",
-	"DLLLD",
-	"DDLDD",
-	".DDD.",
+	".kkk.",
+	"kDLDk",
+	"kLLLk",
+	"kDLDk",
+	".kkk.",
 }
 local PLUS_PALETTE = { D = P.Pine, L = P.Leaf }
 
@@ -57,12 +58,12 @@ local function with(base: Sprite.Palette, extra: Sprite.Palette): Sprite.Palette
 	return out
 end
 
-local ORB_PALETTE = { k = P.Plum, o = P.Orchid, l = P.Rose, w = P.White }
-local COIN_PALETTE = { c = P.Brown, y = P.Yellow, a = P.Amber, o = P.Orange, d = P.DarkBrown }
+local ORB_PALETTE = { k = P.Ink, d = P.Plum, o = P.Orchid, l = P.Rose, w = P.White }
+local COIN_PALETTE = { c = P.Ink, y = P.Yellow, a = P.Amber, o = P.Orange }
 
 local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 	cash = {
-		palette = { k = P.Brown, y = P.Yellow, a = P.Amber, o = P.Orange, d = P.DarkBrown },
+		palette = { k = P.Ink, y = P.Yellow, a = P.Amber, o = P.Orange, d = P.DarkBrown },
 		rows = {
 			"..kkkkkk..",
 			".kyyydyyk.",
@@ -82,12 +83,12 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 			"..kkkkkk..",
 			".kllooook.",
 			"klwwoooook",
-			"klwooooook",
-			"kloooooook",
-			"kooooooook",
-			"kooooookkk",
-			"koooookkkk",
-			".kookkkkk.",
+			"klwooooodk",
+			"kloooooodk",
+			"kooooooodk",
+			"kooooooddk",
+			"kooooodddk",
+			".kooddddk.",
 			"..kkkkkk..",
 		},
 	},
@@ -107,7 +108,7 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 		},
 	},
 	star = {
-		palette = { k = P.Brown, y = P.Yellow, a = P.Amber, o = P.Orange, w = P.White },
+		palette = { k = P.Ink, y = P.Yellow, a = P.Amber, o = P.Orange, w = P.White },
 		rows = {
 			"....kk....",
 			"...kyak...",
@@ -151,17 +152,17 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 			"kkkkkkkkkk",
 			"krcrcrcrck",
 			"krcrcrcrck",
-			"k.k.k.k.k.",
-			".kkkkkkkk.",
+			"kkkkkkkkkk",
 			".khhpphhk.",
 			".kttppttk.",
 			".kbbttbbk.",
 			".kBBppBBk.",
+			".kBBBBBBk.",
 			".kkkkkkkk.",
 		},
 	},
 	upgradeShop = {
-		palette = { k = P.DeepTeal, l = P.Leaf, g = P.Grass, d = P.Pine, w = P.Yellow },
+		palette = { k = P.Ink, l = P.Leaf, g = P.Grass, d = P.Pine, w = P.Yellow },
 		rows = {
 			"....kk....",
 			"...kwlk...",
@@ -176,18 +177,19 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 		},
 	},
 	home = {
-		palette = { k = P.Ink, r = P.Red, c = P.Crimson, s = P.Night },
+		-- a torii gate
+		palette = { k = P.Ink, r = P.Red, c = P.Crimson },
 		rows = {
-			"k........k",
 			"kkkkkkkkkk",
-			".rrrrrrrr.",
-			"..rc..rc..",
-			"cccccccccc",
-			"..rc..rc..",
-			"..rc..rc..",
-			"..rc..rc..",
-			"..rc..rc..",
-			"..kk..kk..",
+			"krrrrrrrrk",
+			"kkrkkkkrkk",
+			".krk..krk.",
+			"kkrkkkkrkk",
+			"kcrccccrck",
+			"kkrkkkkrkk",
+			".krk..krk.",
+			".krk..krk.",
+			".kkk..kkk.",
 		},
 	},
 	settings = {
@@ -199,7 +201,7 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 			"kkmmkkssk.",
 			"kmmk..ksdk",
 			"kmsk..kddk",
-			".kssskddk.",
+			".ksskkddk.",
 			".ksssdddk.",
 			".kkksdkkk.",
 			"...kkkk...",
@@ -221,7 +223,7 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 		},
 	},
 	arrow = {
-		palette = { k = P.Brown, y = P.Yellow, a = P.Amber, o = P.Orange },
+		palette = { k = P.Ink, y = P.Yellow, a = P.Amber, o = P.Orange },
 		rows = {
 			"..kkkkkk..",
 			"..kyyaok..",
@@ -240,21 +242,50 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 	orbValue = {
 		palette = with(ORB_PALETTE, COIN_PALETTE),
 		rows = compose({
-			{ { "..kkk..", ".kllok.", "klwoook", "klooook", "koooook", ".koook.", "..kkk.." }, 0, 0 },
+			{ { "..kkk..", ".kllok.", "klwoook", "klooodk", "koooodk", ".koddk.", "..kkk.." }, 0, 0 },
 			{ { ".ccc.", "cyyac", "cyoac", "caaoc", ".ccc." }, 5, 5 },
 		}),
 	},
 	slots = {
 		palette = with({ k = P.Ink, a = P.Amber, m = P.Mist, s = P.Slate }, PLUS_PALETTE),
 		rows = compose({
-			{ { "kkkkkkkk", "kaaaaaak", "kamsmsak", "kasmsmak", "kamsmsak", "kasmsmak", "kaaaaaak", "kkkkkkkk" }, 0, 0 },
+			{
+				{
+					"kkkkkkkk",
+					"kaaaaaak",
+					"kamsmsak",
+					"kasmsmak",
+					"kamsmsak",
+					"kasmsmak",
+					"kaaaaaak",
+					"kkkkkkkk",
+				},
+				0,
+				0,
+			},
 			{ PLUS, 5, 5 },
 		}),
 	},
 	boxSize = {
-		palette = with({ k = P.Ink, a = P.Amber, b = P.Bark, d = P.Brown, o = P.Orchid, l = P.Rose }, PLUS_PALETTE),
+		palette = with(
+			{ k = P.Ink, a = P.Amber, b = P.Bark, d = P.Brown, o = P.Orchid, l = P.Rose },
+			PLUS_PALETTE
+		),
 		rows = compose({
-			{ { "kkkkkkkk", "kaloolak", "kaooooak", "kaaaaaak", "kbbbbbbk", "kddddddk", "kbbbbbbk", "kkkkkkkk" }, 0, 1 },
+			{
+				{
+					"kkkkkkkk",
+					"kaloolak",
+					"kaooooak",
+					"kaaaaaak",
+					"kbbbbbbk",
+					"kddddddk",
+					"kbbbbbbk",
+					"kkkkkkkk",
+				},
+				0,
+				1,
+			},
 			{ PLUS, 5, 5 },
 		}),
 	},
@@ -263,10 +294,10 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 		rows = {
 			".kkkkkkkk.",
 			".kbbbbbbk.",
-			"..kmaaak..",
-			"..kmmak...",
-			"....ka....",
-			"...kmak...",
+			"..kmmaak..",
+			"..kkmakk..",
+			"....kk....",
+			"..kkmakk..",
 			"..kmmaak..",
 			"..kaaaak..",
 			".kbbbbbbk.",
@@ -274,25 +305,44 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 		},
 	},
 	pads = {
-		palette = with({ k = P.Ink, a = P.Amber, m = P.Mist, s = P.Slate, r = P.Red }, PLUS_PALETTE),
+		-- a Crate Pad as it looks in the world (gold rim, red corner marks) with a tiny crate
+		palette = with(
+			{ k = P.Ink, a = P.Amber, m = P.Mist, r = P.Red, h = P.Bark, t = P.Tan },
+			PLUS_PALETTE
+		),
 		rows = compose({
-			{ { "..kkkk..", ".kaaaak.", "kasmmmak", "kammmmak", "kammmmak", "kammmmak", ".kaaaak.", "..kkkk.." }, 0, 0 },
+			{
+				{
+					".kkkkkkkk.",
+					"kaaaaaaaak",
+					"kakkkkmrak",
+					"kakhhkmmak",
+					"kakttkmmak",
+					"kakkkkmmak",
+					"kammmmmmak",
+					"karmmmmrak",
+					"kaaaaaaaak",
+					".kkkkkkkk.",
+				},
+				0,
+				0,
+			},
 			{ PLUS, 5, 5 },
 		}),
 	},
 	luck = {
-		palette = { k = P.DeepTeal, l = P.Leaf, g = P.Grass, d = P.Pine },
+		palette = { k = P.Ink, l = P.Leaf, g = P.Grass, d = P.Pine },
 		rows = {
 			".kkk.kkk..",
 			"kllgkllgk.",
-			"klggkgggk.",
-			"kgggkggdk.",
+			"klggdgggk.",
+			"kgggdggdk.",
+			"kdddddddk.",
+			"kllgdllgk.",
+			"klggdgggk.",
+			"kgggdggdk.",
 			".kkkdkkk..",
-			"kllgkllgk.",
-			"klggkgggk.",
-			"kgggkggdk.",
-			".kkkdkkk..",
-			"....dd....",
+			"....kk....",
 		},
 	},
 	walkSpeed = {
@@ -312,7 +362,7 @@ local SPECS: { [string]: { palette: Sprite.Palette, rows: { string } } } = {
 	},
 }
 
--- Rarity gems: one shape, a colour ramp per rarity (outline, dark, base, light).
+-- Rarity gems: one shape with an Ink outline, a colour ramp per rarity (dark, base, light).
 local GEM = {
 	"..kkkkkk..",
 	".kwlllodk.",
@@ -326,11 +376,11 @@ local GEM = {
 	"....kk....",
 }
 local GEMS: { [string]: { string } } = {
-	Common = { "Dusk", "Slate", "Mist", "White" },
-	Uncommon = { "DeepTeal", "Pine", "Grass", "Leaf" },
-	Rare = { "Night", "Navy", "Sky", "Cyan" },
-	Epic = { "Night", "Plum", "Orchid", "Rose" },
-	Legendary = { "Brown", "Orange", "Amber", "Yellow" },
+	Common = { "Slate", "Mist", "White" },
+	Uncommon = { "Pine", "Grass", "Leaf" },
+	Rare = { "Navy", "Sky", "Cyan" },
+	Epic = { "Plum", "Orchid", "Rose" },
+	Legendary = { "Orange", "Amber", "Yellow" },
 }
 
 local UNKNOWN = {
@@ -353,12 +403,18 @@ local function gemPalette(rarity: string): Sprite.Palette?
 	local names = GEMS[rarity]
 	if names then
 		local p = Palette :: any
-		return { k = p[names[1]], d = p[names[2]], o = p[names[3]], l = p[names[4]], w = P.White }
+		return { k = P.Ink, d = p[names[1]], o = p[names[2]], l = p[names[3]], w = P.White }
 	end
 	local info = Rarities.get(rarity)
 	if info then
 		local base = Palette.nearest(info.color)
-		return { k = P.Ink, d = Palette.shade(base, 0.4), o = base, l = Palette.nearest(info.glow), w = P.White }
+		return {
+			k = P.Ink,
+			d = Palette.nearest(Palette.shade(base, 0.4)),
+			o = base,
+			l = Palette.nearest(info.glow),
+			w = P.White,
+		}
 	end
 	return nil
 end
@@ -368,10 +424,11 @@ local cache: { [string]: Def } = {}
 -- The icon called `name` (see the list above; "rarity_<Rarity>" for gems). Unknown names
 -- get a "?" tile instead of an error.
 function Icons.get(name: string): Def
-	local def = cache[name]
-	if def then
-		return def
+	local hit = cache[name]
+	if hit then
+		return hit
 	end
+	local def: Def
 	if name == "crates" then
 		def = Crates.icon("basic")
 	else

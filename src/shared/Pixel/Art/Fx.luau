@@ -17,7 +17,7 @@ local Fx = {}
 
 local RAMP: { [string]: { string } } = {
 	Rust = { "Crimson", "Clay" },
-	Clay = { "Rust", "Tan" },
+	Clay = { "Rust", "Amber" }, -- a warm glow, not the floor's Tan
 	Cream = { "Tan", "White" },
 	Tan = { "Bark", "Cream" },
 	Bark = { "Brown", "Tan" },
@@ -51,7 +51,12 @@ local RAMP: { [string]: { string } } = {
 }
 
 local function key(c: Color3): string
-	return string.format("%02x%02x%02x", math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5))
+	return string.format(
+		"%02x%02x%02x",
+		math.floor(c.R * 255 + 0.5),
+		math.floor(c.G * 255 + 0.5),
+		math.floor(c.B * 255 + 0.5)
+	)
 end
 
 local byKey: { [string]: string } = {}
@@ -76,20 +81,36 @@ local function hsv(c: Color3): (number, number, number)
 	return h * 60, if mx > 0 then d / mx else 0, mx
 end
 
--- Snaps a colour to the palette keeping its hue (Palette.nearest turns violets grey).
-local function snapName(color: Color3): string
+-- Palette colours too grey to carry a technique colour (they are also the lane's colours).
+local GREYS = { White = true, Mist = true, Slate = true, Steel = true, Dusk = true, Night = true, Ink = true }
+
+-- Violets have no ramp in ENDESGA 32 and would snap to the greys: they get Plum and Orchid,
+-- with a cool highlight for pale lavender and a warm one for vivid violet.
+local VIOLET = {
+	dark = { "Night", "Plum", "Orchid" },
+	lavender = { "Plum", "Orchid", "Mist" },
+	vivid = { "Plum", "Orchid", "Rose" },
+}
+
+-- Snaps a colour to a (dark, base, light) palette ramp keeping its hue (Palette.nearest
+-- turns violets grey).
+local function snap(color: Color3): { string }
 	local exact = byKey[key(color)]
 	if exact then
-		return exact
+		return { RAMP[exact][1], exact, RAMP[exact][2] }
 	end
 	local h, s, v = hsv(color)
 	if s < 0.2 then
-		return byKey[key(Palette.nearest(color))] or "Slate"
+		local name = byKey[key(Palette.nearest(color))] or "Slate"
+		return { RAMP[name][1], name, RAMP[name][2] }
 	end
-	local best, bestD = "Slate", math.huge
+	if h >= 235 and h <= 300 then
+		return if v < 0.6 then VIOLET.dark elseif s < 0.5 then VIOLET.lavender else VIOLET.vivid
+	end
+	local best, bestD = "Amber", math.huge
 	for name in RAMP do
 		local ph, ps, pv = hsv((Palette :: any)[name])
-		if ps >= 0.3 and pv >= 0.3 then
+		if not GREYS[name] and ps >= 0.3 and pv >= 0.3 then
 			local dh = math.abs(h - ph)
 			dh = math.min(dh, 360 - dh)
 			local d = (dh / 45) ^ 2 + ((v - pv) / 0.35) ^ 2 + ((s - ps) / 0.6) ^ 2
@@ -98,15 +119,14 @@ local function snapName(color: Color3): string
 			end
 		end
 	end
-	return best
+	return { RAMP[best][1], best, RAMP[best][2] }
 end
 
 -- (dark, base, light) palette colours for any colour.
 local function ramp(color: Color3): (Color3, Color3, Color3)
-	local name = snapName(color)
-	local r = RAMP[name]
+	local r = snap(color)
 	local P = Palette :: any
-	return P[r[1]], P[name], P[r[2]]
+	return P[r[1]], P[r[2]], P[r[3]]
 end
 
 local function palette(color: Color3): Sprite.Palette
@@ -128,7 +148,9 @@ end
 
 -- SPRITES ----------------------------------------------------------------------------------
 
--- A Cursed Orb in `color`: 6x6, frame 1 at rest, frame 2 glowing. Anchor at the centre.
+-- A Cursed Orb in `color`: 6x6 with an Ink ring so it reads on the dirt floor and on the
+-- lane alike. Frame 1 at rest (lit top-left, shadow bottom-right), frame 2 glowing (bright
+-- core). Anchor at the centre.
 function Fx.orb(color: Color3): Def
 	return cached("orb", color, function()
 		return Sprite.define({
@@ -137,20 +159,20 @@ function Fx.orb(color: Color3): Def
 			anchor = { 3, 3 },
 			frames = {
 				{
-					".dddd.",
-					"dwlood",
-					"dloood",
-					"dooood",
-					"dooodd",
-					".dddd.",
+					".kkkk.",
+					"kwlook",
+					"kloodk",
+					"kooodk",
+					"kooddk",
+					".kkkk.",
 				},
 				{
-					".oooo.",
-					"owwllo",
-					"owlllo",
-					"ollllo",
-					"ollllo",
-					".oooo.",
+					".kkkk.",
+					"kwoook",
+					"kollok",
+					"kollok",
+					"kooook",
+					".kkkk.",
 				},
 			},
 		})
@@ -196,7 +218,13 @@ Fx.spark = Sprite.define({
 -- A spinning gold coin: 8x8, 4 frames (face, turning, edge, back). Anchor at the centre.
 Fx.coin = Sprite.define({
 	name = "Coin",
-	palette = { k = Palette.Brown, y = Palette.Yellow, a = Palette.Amber, o = Palette.Orange, w = Palette.White },
+	palette = {
+		k = Palette.Brown,
+		y = Palette.Yellow,
+		a = Palette.Amber,
+		o = Palette.Orange,
+		w = Palette.White,
+	},
 	anchor = { 4, 4 },
 	frames = {
 		{
@@ -242,8 +270,10 @@ Fx.coin = Sprite.define({
 	},
 })
 
--- A crescent blade swing facing right: 16x16, 3 frames (start, full arc, fading).
--- Built from two circles: inside A (centre 4,8 r 10), outside B (centre 1,8 r 10.5).
+-- A crescent blade swing facing right: 16x16, 3 frames (the swing starting, the full arc,
+-- fading). The crescent lies inside circle A (centre 5,8, r 7) and outside circle B (centre
+-- 1,8, r 7): 4 px thick at mid-height, tapering to points at rows 1 and 14. The 1-px leading
+-- edge is White and the light tone, the body the base colour, the trailing edge the dark tone.
 function Fx.slash(color: Color3): Def
 	return cached("slash", color, function()
 		local frames = {}
@@ -253,19 +283,24 @@ function Fx.slash(color: Color3): Def
 				local row = table.create(16, ".")
 				for x = 0, 15 do
 					local px, py = x + 0.5, y + 0.5
-					local da = math.sqrt((px - 4) ^ 2 + (py - 8) ^ 2)
+					local da = math.sqrt((px - 5) ^ 2 + (py - 8) ^ 2)
 					local db = math.sqrt((px - 1) ^ 2 + (py - 8) ^ 2)
-					if da <= 10 and db > 10.5 then
-						local depth = 10 - da -- 0 at the outer edge
-						local c = if depth < 1 then "w" elseif depth < 2 then "l" else "o"
+					if da <= 7 and db > 7 then
+						local lead = 7 - da -- 0 at the leading (outer) edge
+						local trail = db - 7 -- 0 at the trailing (inner) edge
+						local mid = math.abs(py - 8)
+						local c = if lead < 1
+							then (if mid < 4 then "w" else "l")
+							elseif trail < 1 and mid < 5 then "d"
+							else "o"
 						if f == 1 then
-							-- the blade's leading edge: the upper two thirds, thin
-							if py > 11 or depth >= 1.6 then
+							-- the swing starting: the upper half only
+							if py > 8 then
 								c = "."
 							end
 						elseif f == 3 then
-							-- fading: the inner side only, darker, dissolving from the top
-							if depth < 0.8 or py < 3 or (py < 9 and (x + y) % 2 == 1) then
+							-- fading: the body only, dithered base and dark
+							if lead < 1 then
 								c = "."
 							else
 								c = if (x + y) % 2 == 0 then "o" else "d"

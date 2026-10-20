@@ -48,7 +48,10 @@ local farms = map:FindFirstChild("Farms")
 check(farms and #farms:GetChildren() == Layout.FarmCount, "six farms")
 for _, farm in farms:GetChildren() do
 	local pad = farm:FindFirstChild("CollectPad")
-	check(pad and pad:GetAttribute("TouchAction") == "Collect" and pad:GetAttribute("Farm"), farm.Name .. " collect pad")
+	check(
+		pad and pad:GetAttribute("TouchAction") == "Collect" and pad:GetAttribute("Farm"),
+		farm.Name .. " collect pad"
+	)
 end
 local plaza = map:FindFirstChild("Plaza")
 check(plaza and plaza.SellStand:FindFirstChild("SellPad"), "sell pad")
