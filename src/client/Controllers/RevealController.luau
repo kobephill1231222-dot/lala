@@ -1,8 +1,9 @@
 --!nonstrict
--- Opening a Crate. In the world, the crate on its pad shakes harder and harder, glows in the
--- colour of what's inside, then the lid bursts off in a pillar of light and the Sorcerer's
--- silhouette rises out. For the owner, a card follows with the Sorcerer's rarity, technique,
--- Orb Value and Orbs per Second, and a Place button.
+-- Opening a Crate, in pixel art. On the pad, the crate shakes harder and harder (its shake
+-- frames) inside a glow ring in the colour of what's inside; then the lid flies off in a pillar
+-- of light and the Sorcerer rises out of the crate, pale and glowing. For the owner, a card
+-- follows with the Sorcerer's rarity, technique, Orb Value and Orbs per Second, and Place /
+-- Later buttons (E / gamepad A to Place, Esc / B for Later).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,49 +17,61 @@ local Rarities = require(Shared.Config.Rarities)
 local Sorcerers = require(Shared.Config.Sorcerers)
 local Economy = require(Shared.Rules.Economy)
 local Format = require(Shared.Util.Format)
-local CharacterModels = require(Shared.Visuals.CharacterModels)
-local CrateModels = require(Shared.Visuals.CrateModels)
+local Palette = require(Shared.Pixel.Palette)
+local Sprite = require(Shared.Pixel.Sprite)
+local Characters = require(Shared.Pixel.Art.Characters)
+local CrateArt = require(Shared.Pixel.Art.Crates)
+local Fx = require(Shared.Pixel.Art.Fx)
 
-local UI = script.Parent.Parent.UI
-local UIKit = require(UI.UIKit)
-local Theme = require(UI.Theme)
+local Pixel = script.Parent.Parent:WaitForChild("Pixel")
+local Screen = require(Pixel.Screen)
+local Camera2D = require(Pixel.Camera2D)
+local Actor = require(Pixel.Actor)
+local Widgets = require(Pixel.Widgets)
+local FxPool = require(Pixel.FxPool)
+local UIKit = require(script.Parent.Parent.UI.UIKit)
 
 local RevealController = {}
 
-local new = UIKit.new
 local registry: any
 local playing = false
+local rng = Random.new()
 
-local function hex(c: Color3): string
-	return string.format("#%02x%02x%02x", c.R * 255, c.G * 255, c.B * 255)
+-- The rarity's colours on the palette: (dark, base, light).
+local function rarityColors(rarity: any): (Color3, Color3, Color3)
+	local p = Fx.orb(rarity.color).palette
+	return p.d, p.o, p.l
 end
 
+-- A short camera shake: the camera follows a point jittering around your character.
 local function shakeCamera(intensity: number, duration: number)
 	local character = Players.LocalPlayer.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") then
 		return
 	end
-	local started = os.clock()
+	local t = 0
 	local connection
-	connection = RunService.RenderStepped:Connect(function()
-		local t = os.clock() - started
-		if t > duration then
-			humanoid.CameraOffset = Vector3.zero
+	connection = RunService.RenderStepped:Connect(function(dt)
+		t += dt
+		if t > duration or not root.Parent then
+			Camera2D.setFocus(nil)
 			connection:Disconnect()
 			return
 		end
 		local falloff = 1 - t / duration
-		humanoid.CameraOffset = Vector3.new(math.random() - 0.5, math.random() - 0.5, 0) * intensity * falloff
+		local px = math.floor((rng:NextNumber(-1, 1)) * intensity * 3 * falloff + 0.5)
+		local py = math.floor((rng:NextNumber(-1, 1)) * intensity * 3 * falloff + 0.5)
+		-- Whole art pixels (4 per stud), so the world never shimmers.
+		Camera2D.setFocus(
+			root.CFrame.Position + Vector3.new(px / Layout.PixelsPerStud, 0, py / Layout.PixelsPerStud)
+		)
 	end)
 end
 
-local function setTransparency(model: Instance, value: number)
-	for _, d in model:GetDescendants() do
-		if d:IsA("BasePart") and d.Name ~= "Root" and d.Name ~= "LidRoot" then
-			d.Transparency = math.max(d.Transparency, value)
-		end
-	end
+local function heartbeat(): number
+	local dt = RunService.Heartbeat:Wait()
+	return if type(dt) == "number" then math.min(dt, 0.1) else 1 / 60
 end
 
 -- World animation at the pad. Returns after the lid has burst (about 1.7 s).
@@ -67,9 +80,9 @@ function RevealController.playWorld(payload: any, mine: boolean)
 	if not farm or not pad then
 		return
 	end
-	local base = Layout.padWorld(farm, pad) * CFrame.new(0, 0.6, 0)
-	local camera = workspace.CurrentCamera
-	if not mine and camera and (camera.Focus.Position - base.Position).Magnitude > 180 then
+	local base = Layout.padWorld(farm, pad).Position
+	local effects = registry.EffectsController
+	if not mine and not effects.visible(base, 96) then
 		return
 	end
 	local tier = payload.tier or "basic"
@@ -78,97 +91,138 @@ function RevealController.playWorld(payload: any, mine: boolean)
 	end
 	local rarity = Rarities.get(payload.rarity) or Rarities.Info.Common
 	local color = rarity.color
-	local effects = registry.EffectsController
-	local crate = CrateModels.build(tier, base)
-	crate.Name = "RevealCrate"
-	crate.Parent = workspace
-	local root = crate.PrimaryPart :: BasePart
-	local lid = crate:FindFirstChild("Lid") :: Model
-	local lidRoot = lid.PrimaryPart :: BasePart
-	local lidBase = lidRoot.CFrame
-	local glow = Instance.new("PointLight")
-	glow.Color = color
-	glow.Range = 0
-	glow.Brightness = 3
-	glow.Parent = root
+	local dark, mid, light = rarityColors(rarity)
+	local px, py = Camera2D.toArt(base)
+	local footY = py + 6 -- where crates stand on a pad
+
+	-- Our own crate on the pad (the real one goes when the server removes it).
+	local WorldView = registry.WorldView
+	local real = WorldView and WorldView.crate(farm, pad)
+	local view = WorldView and WorldView.farm(farm)
+	local realCid = view and view.crateInfo[pad] and view.crateInfo[pad].cid
+	if real then
+		pcall(function()
+			real:setVisible(false)
+		end)
+	end
+	local crate = Actor.new(
+		Screen.layers.Actors,
+		{ crate = CrateArt.sprite(tier) },
+		{ name = "RevealCrate", zBias = 2 }
+	)
+	crate:moveTo(px, footY)
+	crate:play("crate", 1)
+
+	-- Shake: frames 2 / 3 alternate faster and the crate jumps further as it builds.
 	local duration = 1.5 + rarity.rank * 0.12
-	local started = os.clock()
+	local elapsed = 0 -- game time (Heartbeat), so the stage never skips when a frame is slow
 	local nextThud = 0
+	local glow: Frame? = nil
+	local glowKey = ""
 	while true do
-		local t = (os.clock() - started) / duration
+		local t = elapsed / duration
 		if t >= 1 then
 			break
 		end
-		local amp = 0.04 + t * t * 0.35
-		local wobble = CFrame.Angles(
-			math.rad((math.random() - 0.5) * 30 * amp),
-			0,
-			math.rad((math.random() - 0.5) * 30 * amp)
-		)
-		root.CFrame = base * CFrame.new(0, math.abs(math.sin(t * 40)) * amp, 0) * wobble
-		lidRoot.CFrame = root.CFrame * base:ToObjectSpace(lidBase) * CFrame.new(0, amp * 0.6, 0)
-		glow.Range = 4 + t * 18
+		local amp = 1 + t * t * 3 -- 1..4 px
+		local rate = 6 + t * 18 -- shakes per second
+		local phase = math.floor(elapsed * rate)
+		local side = if phase % 2 == 0 then -1 else 1
+		crate:play("crate", if side < 0 then 2 else 3)
+		local hop = if phase % 3 == 0 then math.floor(amp * 0.5 + 0.5) else 0
+		crate:moveTo(px + math.floor(side * amp * 0.5 + 0.5), footY - hop)
+		-- Glow ring in the rarity's colour, growing in 2-pixel steps (six pooled sizes) and
+		-- pulsing as it builds.
+		local r = 6 + 2 * math.min(5, math.floor(t * 6))
+		local c = if t < 0.5 then dark elseif t < 0.85 then mid else light
+		local key = r .. tostring(c)
+		if key ~= glowKey then
+			FxPool.release(glow)
+			glow = FxPool.canvas("revealRing:" .. r .. ":" .. tostring(c), function(canvas)
+				Fx.ring(canvas, 0, 0, r, c)
+				Fx.ring(canvas, 0, 0, math.max(1, r - 2), c)
+			end, 2)
+			glowKey = key
+			FxPool.place(glow :: Frame, px, footY - 6)
+		end
+		local ring = glow :: Frame
+		ring.Visible = t < 0.4 or phase % 3 ~= 0
 		if mine and t >= nextThud then
 			nextThud = t + 0.22 - t * 0.12
 			registry.SoundController.play("crateShake")
 		end
-		RunService.Heartbeat:Wait()
+		elapsed += heartbeat()
 	end
-	root.CFrame = base
+	FxPool.release(glow)
+	crate:moveTo(px, footY)
+	crate:play("crate", 4) -- open, light pouring out
+
 	-- Burst: lid flies off, pillar of rarity light
-	effects.pillar(base.Position, color, 40 + rarity.rank * 12, 1.3)
-	effects.ring(base.Position + Vector3.new(0, 1, 0), color, 4, 26, 0.8)
-	effects.burst(base.Position + Vector3.new(0, 4, 0), color, 30 + rarity.rank * 12, 22, 1)
+	effects.pillar(base, color, 40 + rarity.rank * 12, 1.3)
+	effects.ring(base + Vector3.new(0, 1, 0), color, 4, 26, 0.8)
+	effects.burst(base + Vector3.new(0, 4, 0), color, 30 + rarity.rank * 12, 22, 1)
 	registry.SoundController.playAt(
 		if rarity.rank >= 4 then "revealLegendary" elseif rarity.rank >= 3 then "revealRare" else "reveal",
-		base.Position
+		base
 	)
 	if mine and rarity.rank >= 4 then
 		shakeCamera(if rarity.rank == 5 then 1.2 else 0.7, 0.7)
 	end
 	task.spawn(function()
-		local spin = math.random() < 0.5 and -1 or 1
-		local t0 = os.clock()
-		local start = lidRoot.CFrame
-		while os.clock() - t0 < 0.9 and lidRoot.Parent do
-			local t = (os.clock() - t0) / 0.9
-			lidRoot.CFrame = start
-				* CFrame.new(spin * t * 6, 12 * t - 9 * t * t, 0)
-				* CFrame.Angles(0, 0, spin * t * 4)
-			RunService.Heartbeat:Wait()
+		local lid = FxPool.sprite(CrateArt.lid(tier), "lid:" .. tier, false, nil, 5)
+		local spin = if rng:NextNumber() < 0.5 then -1 else 1
+		local lx, ly = px, footY - 12
+		local spent = 0
+		while spent < 0.9 do
+			local t = spent / 0.9
+			FxPool.place(lid, lx + spin * t * 24, ly - 48 * t + 40 * t * t)
+			Sprite.show(lid, math.floor(t * 10) % 4 + 1)
+			lid.Visible = t < 0.7 or math.floor(t * 30) % 2 == 0
+			spent += heartbeat()
 		end
-		crate:Destroy()
+		FxPool.release(lid)
+		task.wait(0.5)
+		crate:destroy()
+		-- The server normally removes the opened crate long before this; if that same crate is
+		-- somehow still on the pad, show it again.
+		local info = view and view.crateInfo[pad]
+		if real and info and info.cid == realCid and WorldView.crate(farm, pad) == real then
+			pcall(function()
+				real:setVisible(true)
+			end)
+		end
 	end)
-	-- The Sorcerer's silhouette rises from the crate
+	-- The Sorcerer rises from the crate, pale and glowing in the rarity's colour.
 	local def = Sorcerers.get(payload.id or "")
 	if def then
-		local ghost = CharacterModels.build(
-			def.id,
-			base * CFrame.new(0, 1, 0),
-			{ ghost = true, scale = CharacterModels.FarmScale, companion = false }
-		)
-		for _, d in ghost:GetDescendants() do
-			if d:IsA("BasePart") and d.Name ~= "Root" then
-				d.Material = Enum.Material.Neon
-				d.Color = d.Color:Lerp(color, 0.5)
-			end
-		end
-		ghost.Parent = workspace
 		task.spawn(function()
-			local t0 = os.clock()
-			local ghostRoot = ghost.PrimaryPart :: BasePart
-			while os.clock() - t0 < 1.4 and ghost.Parent do
-				local t = (os.clock() - t0) / 1.4
-				ghostRoot.CFrame = base * CFrame.new(0, 1 + t * 5, 0) * CFrame.Angles(0, t * math.pi * 2, 0)
-				setTransparency(ghost, 0.55 + t * 0.45)
-				RunService.Heartbeat:Wait()
+			local art = Characters.sorcerer(def.id)
+			local palette = {}
+			for k, c in art.idle.palette do
+				palette[k] = Palette.nearest(c:Lerp(light, 0.45):Lerp(Palette.White, 0.25))
 			end
-			ghost:Destroy()
+			local ghost =
+				FxPool.sprite(art.idle, "revealGhost:" .. def.id .. ":" .. rarity.rank, false, palette, 6)
+			local spent = 0
+			while spent < 1.4 do
+				local t = spent / 1.4
+				Sprite.show(ghost, if math.floor(t * 6) % 2 == 0 then 1 else 2)
+				FxPool.place(ghost, px, footY - 6 - math.floor(t * 22 + 0.5))
+				ghost.Visible = t < 0.65 or math.floor(t * 30) % 2 == 0
+				spent += heartbeat()
+			end
+			FxPool.release(ghost)
 		end)
 	end
 end
 
-local function revealCard(gui: ScreenGui, payload: any): string
+-- Card ------------------------------------------------------------------------------------------
+
+local CARD_W = 184
+
+-- The card, built from UIKit's pixel helpers in art pixels (`root` is blown up by a whole-number
+-- UIScale). Returns "place" or "close".
+local function revealCard(gui: ScreenGui, root: Frame, rootW: number, rootH: number, payload: any): string
 	local def = Sorcerers.get(payload.id)
 	local rarity = Rarities.get(payload.rarity)
 	if not def or not rarity then
@@ -176,109 +230,106 @@ local function revealCard(gui: ScreenGui, payload: any): string
 	end
 	local profile = registry.StateController.profile
 	local unit = { id = def.id, level = 1 }
-	local burstFrame = new("Frame", {
-		Parent = gui,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.45),
-		Size = UDim2.fromOffset(40, 40),
-		BackgroundColor3 = rarity.color,
-		BackgroundTransparency = 0.1,
-		UIKit.round(),
-	})
-	UIKit.tween(
-		burstFrame,
-		0.6,
-		{ Size = UDim2.fromOffset(900, 900), BackgroundTransparency = 1 },
-		Enum.EasingStyle.Quart
-	)
-	task.delay(0.7, function()
-		burstFrame:Destroy()
+	local dark, mid, light = rarityColors(rarity)
+
+	-- Flash of the rarity's colour
+	local flash = UIKit.rect(root, 0, 0, rootW, rootH, mid, "Flash", 1)
+	flash.BackgroundTransparency = 0.4
+	task.delay(0.08, function()
+		flash.BackgroundTransparency = 0.7
+	end)
+	task.delay(0.16, function()
+		flash:Destroy()
 	end)
 
-	local cardScale = new("UIScale", { Scale = 0.3 })
-	local card = new("Frame", {
-		Name = "RevealCard",
-		Parent = gui,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(420, 540),
-		BackgroundColor3 = Theme.Panel,
-		BackgroundTransparency = 0.04,
-		cardScale,
-		UIKit.corner(18),
-		UIKit.stroke(rarity.color, 3, 0),
-		UIKit.gradient(rarity.color:Lerp(Theme.Panel, 0.6), Theme.Panel, 90),
-	})
-	UIKit.tween(cardScale, 0.45, { Scale = registry.UIController.panelScale }, Enum.EasingStyle.Back)
-	local viewport = UIKit.viewport(def.id, UDim2.fromOffset(260, 250), { spin = true })
-	viewport.AnchorPoint = Vector2.new(0.5, 0)
-	viewport.Position = UDim2.new(0.5, 0, 0, 10)
-	viewport.Parent = card
-	local badge = UIKit.rarityBadge(payload.rarity, 26)
-	badge.AnchorPoint = Vector2.new(0.5, 0)
-	badge.Position = UDim2.new(0.5, 0, 0, 262)
+	-- Text lines under the name
+	local lines = {}
+	local maxChars = math.floor((CARD_W - 12) / 8)
+	for _, line in UIKit.wrap(string.upper("Technique: " .. def.technique), maxChars) do
+		table.insert(lines, { text = line, color = Palette.nearest(def.color) })
+	end
+	table.insert(
+		lines,
+		{ text = "ORB VALUE " .. Format.cash(Economy.orbValue(unit, profile)), color = Palette.White }
+	)
+	table.insert(lines, { text = "ORBS PER SECOND " .. Format.abbreviate(def.ops), color = Palette.White })
+	for _, line in
+		UIKit.wrap(
+			string.upper("Earns " .. Format.cash(Economy.income(unit, profile)) .. "/s on a slot"),
+			maxChars
+		)
+	do
+		table.insert(lines, { text = line, color = Palette.Leaf })
+	end
+	local nameText = string.upper(def.name)
+	local nameSize = if UIKit.textWidth(nameText, 16) <= CARD_W - 12 then 16 else 8
+	local portrait = UIKit.portraitDef(def.id)
+	local pscale = 2
+	local boxW = portrait.w * pscale + 8
+	local boxH = portrait.h * pscale + 8
+	local y = 6
+	local rarityY = y
+	y += 14
+	local boxY = y
+	y += boxH + 4
+	local nameY = y
+	y += nameSize + 4
+	local linesY = y
+	y += #lines * UIKit.LineHeight + 4
+	local buttonsY = y
+	local cardH = y + 16 + 6
+
+	-- The card unrolls from the middle inside a clipping holder (whole pixels).
+	local holder = Instance.new("Frame")
+	holder.Name = "RevealCard"
+	holder.BackgroundTransparency = 1
+	holder.BorderSizePixel = 0
+	holder.ClipsDescendants = true
+	holder.ZIndex = 2
+	holder.Parent = root
+	local cx = math.floor((rootW - CARD_W) / 2)
+	local cy = math.max(0, math.floor((rootH - cardH) / 2))
+	local style = { fill = Palette.Night, light = mid, dark = dark, edge = Palette.Ink, text = Palette.White }
+	local card = UIKit.box(holder, 0, 0, CARD_W, cardH, style, nil, "Card")
+
+	-- Rarity chip
+	local badge = UIKit.rarityBadge(payload.rarity)
+	badge.Position = UDim2.fromOffset(math.floor((CARD_W - badge.Size.X.Offset) / 2), rarityY)
 	badge.Parent = card
-	UIKit.text({
-		Name = "SorcererName",
-		Parent = card,
-		Position = UDim2.fromOffset(16, 292),
-		Size = UDim2.new(1, -32, 0, 44),
-		Text = def.name,
-		FontFace = Theme.TitleBold,
-		TextSize = 40,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		TextColor3 = rarity.glow,
+	-- Portrait in a dark box edged with the rarity's colour
+	local box = UIKit.box(card, math.floor((CARD_W - boxW) / 2), boxY, boxW, boxH, {
+		fill = Palette.Ink,
+		light = dark,
+		dark = dark,
+		edge = mid,
+	}, nil, "PortraitBox")
+	local picture = UIKit.portrait(def.id, pscale)
+	picture.Position = UDim2.fromOffset(4, 4)
+	picture.Parent = box
+	-- Name, technique and numbers
+	UIKit.label(card, nameText, math.floor((CARD_W - UIKit.textWidth(nameText, nameSize)) / 2), nameY, {
+		color = light,
+		size = nameSize,
+		name = "SorcererName",
 	})
-	UIKit.text({
-		Parent = card,
-		Position = UDim2.fromOffset(16, 336),
-		Size = UDim2.new(1, -32, 0, 22),
-		Text = string.format("Technique: <font color='%s'><b>%s</b></font>", hex(def.color), def.technique),
-		TextColor3 = Theme.TextDim,
-		TextSize = 16,
-		TextXAlignment = Enum.TextXAlignment.Center,
-	})
-	UIKit.text({
-		Name = "Stats",
-		Parent = card,
-		Position = UDim2.fromOffset(16, 364),
-		Size = UDim2.new(1, -32, 0, 70),
-		Text = string.format(
-			"Orb Value <b>%s</b>   -   Orbs per Second <b>%s</b>\n<font color='#78e678'>Earns %s/s on a slot</font>",
-			Format.cash(Economy.orbValue(unit, profile)),
-			Format.abbreviate(def.ops),
-			Format.cash(Economy.income(unit, profile))
-		),
-		FontFace = Theme.BodyBold,
-		TextSize = 17,
-		TextXAlignment = Enum.TextXAlignment.Center,
-	})
-	if payload.isNew then
-		new("Frame", {
-			Parent = card,
-			Position = UDim2.fromOffset(14, 14),
-			Size = UDim2.fromOffset(70, 30),
-			BackgroundColor3 = Theme.Gold,
-			Rotation = -8,
-			UIKit.corner(8),
-			UIKit.text({
-				Size = UDim2.fromScale(1, 1),
-				Text = "NEW!",
-				FontFace = Theme.Heavy,
-				TextSize = 17,
-				TextColor3 = Color3.fromRGB(40, 20, 10),
-				TextXAlignment = Enum.TextXAlignment.Center,
-			}),
+	for i, line in lines do
+		local w = UIKit.textWidth(line.text)
+		UIKit.label(card, line.text, math.floor((CARD_W - w) / 2), linesY + (i - 1) * UIKit.LineHeight, {
+			color = line.color,
+			name = "Stats",
 		})
+	end
+	if payload.isNew then
+		local tag = UIKit.box(card, 5, 5, UIKit.textWidth("NEW!") + 8, 12, "gold", nil, "New")
+		UIKit.label(tag, "NEW!", 4, 2, { color = Palette.Ink, noShadow = true })
 	end
 	local choice: string? = nil
 	UIKit.button({
 		parent = card,
 		text = "Place",
 		style = "gold",
-		size = UDim2.fromOffset(180, 50),
-		position = UDim2.new(0.5, -190, 1, -70),
-		textSize = 20,
+		size = UDim2.fromOffset(72, 16),
+		position = UDim2.fromOffset(math.floor(CARD_W / 2) - 76, buttonsY),
 		onClick = function()
 			choice = "place"
 		end,
@@ -287,13 +338,31 @@ local function revealCard(gui: ScreenGui, payload: any): string
 		parent = card,
 		text = "Later",
 		style = "secondary",
-		size = UDim2.fromOffset(180, 50),
-		position = UDim2.new(0.5, 10, 1, -70),
-		textSize = 20,
+		size = UDim2.fromOffset(72, 16),
+		position = UDim2.fromOffset(math.floor(CARD_W / 2) + 4, buttonsY),
 		onClick = function()
 			choice = "close"
 		end,
 	})
+	local function unroll(t: number)
+		local h = math.floor(cardH * t + 0.5)
+		local top = cy + math.floor((cardH - h) / 2)
+		holder.Position = UDim2.fromOffset(cx, top)
+		holder.Size = UDim2.fromOffset(CARD_W, h)
+		card.Position = UDim2.fromOffset(0, cy - top)
+	end
+	unroll(0)
+	task.spawn(function()
+		local spent = 0
+		while holder.Parent do
+			local t = math.min(1, spent / 0.25)
+			unroll(1 - (1 - t) ^ 3)
+			if t >= 1 then
+				break
+			end
+			spent += heartbeat()
+		end
+	end)
 	local keyConnection = UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
 			return
@@ -304,13 +373,21 @@ local function revealCard(gui: ScreenGui, payload: any): string
 			choice = "close"
 		end
 	end)
-	while not choice and card.Parent do
+	while not choice and holder.Parent and gui.Parent do
 		task.wait()
 	end
 	keyConnection:Disconnect()
-	UIKit.tween(cardScale, 0.18, { Scale = 0 })
-	task.wait(0.18)
-	card:Destroy()
+	-- Roll back up.
+	local closing = 0
+	while holder.Parent do
+		local t = math.min(1, closing / 0.15)
+		unroll(1 - t)
+		if t >= 1 then
+			break
+		end
+		closing += heartbeat()
+	end
+	holder:Destroy()
 	return choice or "close"
 end
 
@@ -323,25 +400,19 @@ function RevealController.play(result: any, onFinished: (() -> ())?)
 	local farm = registry.StateController.farm()
 	local payload = table.clone(result)
 	payload.farm = payload.farm or farm
-	RevealController.playWorld(payload, true)
-	local gui = new("ScreenGui", {
-		Name = "Reveal",
-		DisplayOrder = 20,
-		IgnoreGuiInset = true,
-		ResetOnSpawn = false,
-		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
-	})
-	local backdrop = new("Frame", {
-		Parent = gui,
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Color3.fromRGB(10, 6, 18),
-		BackgroundTransparency = 1,
-	})
-	UIKit.tween(backdrop, 0.3, { BackgroundTransparency = 0.35 })
-	local choice = revealCard(gui, payload)
-	UIKit.tween(backdrop, 0.25, { BackgroundTransparency = 1 })
-	task.wait(0.25)
-	gui:Destroy()
+	local ok, err = pcall(RevealController.playWorld, payload, true)
+	if not ok then
+		warn("[JJK Farm] reveal", err)
+	end
+	local hud = Widgets.screen("Reveal", 20, true)
+	local backdrop = UIKit.rect(hud.root, 0, 0, hud.w, hud.h, Palette.Ink, "Backdrop", 0)
+	backdrop.BackgroundTransparency = 0.35
+	local cardOk, choice = pcall(revealCard, hud.gui, hud.root, hud.w, hud.h, payload)
+	if not cardOk then
+		warn("[JJK Farm] reveal card", choice)
+		choice = "close"
+	end
+	hud.destroy()
 	playing = false
 	if choice == "place" and payload.uid then
 		task.defer(function()

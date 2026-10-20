@@ -1,6 +1,8 @@
 --!nonstrict
 -- The Crate Shop: every crate for sale with its price, Opening Time and the chance of each
--- rarity. Buying works at the shop in the plaza; elsewhere this is a catalogue.
+-- rarity. Buying works at the shop in the plaza; elsewhere this is a catalogue. Pixel window:
+-- the crates on the left (icon, name, price), the picked crate's sprite, Opening Time, odds
+-- and Buy button on the right.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -11,50 +13,44 @@ local Layout = require(Shared.Config.FarmLayout)
 local Rarities = require(Shared.Config.Rarities)
 local Economy = require(Shared.Rules.Economy)
 local Format = require(Shared.Util.Format)
+local Palette = require(Shared.Pixel.Palette)
+local Icons = require(Shared.Pixel.Art.Icons)
+local CrateArt = require(Shared.Pixel.Art.Crates)
 
 local UIKit = require(script.Parent.Parent.UIKit)
-local Theme = require(script.Parent.Parent.Theme)
 
 local CrateShopPanel = {}
 
-local new = UIKit.new
-
-local function hex(c: Color3): string
-	return string.format("#%02x%02x%02x", c.R * 255, c.G * 255, c.B * 255)
-end
+local P = Palette
+local fromOffset = UDim2.fromOffset
+local W, H = 316, 164
+local CW, CH = W - 8, H - 23
+local LIST_W = 148
+local ROW_H = 22
+local DETAIL_X = LIST_W + 4
+local DETAIL_W = CW - DETAIL_X
 
 function CrateShopPanel.create(registry: any)
 	local state = registry.StateController
 	local ui = registry.UIController
-	local root, content, scale = UIKit.panel("Crate Shop", Vector2.new(860, 560), function()
+	local root, content, scale = UIKit.panel("Crate Shop", Vector2.new(W, H), function()
 		ui.close()
 	end)
-	local note = UIKit.text({
-		Parent = content,
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 0, 1, 0),
-		Size = UDim2.new(1, -230, 0, 40),
-		Text = "",
-		TextColor3 = Theme.TextDim,
-		TextSize = 15,
-	})
+
+	-- Title bar: walk there (only while away from the shop).
+	local goW = UIKit.textWidth("Walk me there") + 8
 	local goButton = UIKit.button({
-		parent = content,
+		parent = root,
 		text = "Walk me there",
-		style = "secondary",
-		size = UDim2.fromOffset(210, 40),
-		position = UDim2.new(1, -210, 1, -40),
+		style = "gold",
+		size = fromOffset(goW, 14),
+		position = fromOffset(W - 2 - UIKit.Window.CloseSize - 2 - goW, 2),
 		onClick = function()
 			ui.close(true)
 			registry.TutorialController.pointAt(Layout.CrateShop + Vector3.new(0, 0, 10), "Crate Shop")
 		end,
 	})
-	local row = new("Frame", {
-		Parent = content,
-		Size = UDim2.new(1, 0, 1, -52),
-		BackgroundTransparency = 1,
-		UIKit.list(Enum.FillDirection.Horizontal, 10, Enum.HorizontalAlignment.Center),
-	})
+	goButton.ZIndex = 3
 
 	local sold = {}
 	for _, def in Crates.List do
@@ -65,76 +61,97 @@ function CrateShopPanel.create(registry: any)
 	table.sort(sold, function(a, b)
 		return a.order < b.order
 	end)
+	local selected = sold[1] and sold[1].id
+	local rows = {}
 
-	local cards = {}
-	for i, def in sold do
-		local cardFrame = new("Frame", {
-			Parent = row,
-			LayoutOrder = i,
-			Size = UDim2.new(0.25, -8, 1, 0),
-			BackgroundColor3 = Theme.PanelLight,
-			UIKit.corner(14),
-			UIKit.stroke(def.color, 2, 0.3),
+	-- Detail (right)
+	local detail = UIKit.box(content, DETAIL_X, 0, DETAIL_W, CH, "well", "Frame", "Detail")
+	local inner = DETAIL_W - 8
+	local spriteHolder = Instance.new("Frame")
+	spriteHolder.Name = "Crate"
+	spriteHolder.BackgroundTransparency = 1
+	spriteHolder.Position = fromOffset(4, 4)
+	spriteHolder.Size = fromOffset(32, 32)
+	spriteHolder.ZIndex = UIKit.Z
+	spriteHolder.Parent = detail
+	local nameText = UIKit.para(detail, 40, 5, DETAIL_W - 44, 2, { name = "Name" })
+	local priceLabel =
+		UIKit.label(detail, "", 40, 25, { name = "Price", color = P.Yellow, width = DETAIL_W - 44 })
+	UIKit.label(detail, "Opening Time:", 4, 40, { name = "OpeningTitle", color = P.Slate })
+	local timeLabel = UIKit.label(detail, "", 4, 49, { name = "OpeningTime", width = inner })
+	local odds = {}
+	for i, rarity in Rarities.Order do
+		local y = 60 + (i - 1) * 10
+		local gem = UIKit.sprite(Icons.get("rarity_" .. rarity), 1, { name = "Gem" .. rarity })
+		gem.Position = fromOffset(4, y)
+		gem.Parent = detail
+		local info = Rarities.get(rarity)
+		local label = UIKit.label(detail, "", 16, y + 1, {
+			name = "Odds" .. rarity,
+			color = if info then P.nearest(info.glow) else P.Mist,
+			width = inner - 12,
 		})
-		local viewport = UIKit.crateViewport(def.id, UDim2.new(1, 0, 0, 130))
-		viewport.Parent = cardFrame
-		UIKit.text({
-			Parent = cardFrame,
-			Position = UDim2.fromOffset(8, 128),
-			Size = UDim2.new(1, -16, 0, 28),
-			Text = def.name,
-			FontFace = Theme.TitleBold,
-			TextSize = 22,
-			TextColor3 = def.color:Lerp(Color3.new(1, 1, 1), 0.35),
-			TextXAlignment = Enum.TextXAlignment.Center,
-		})
-		local price = UIKit.text({
-			Parent = cardFrame,
-			Position = UDim2.fromOffset(8, 156),
-			Size = UDim2.new(1, -16, 0, 26),
-			Text = Format.cash(def.price),
-			FontFace = Theme.Heavy,
-			TextSize = 22,
-			TextColor3 = Theme.Gold,
-			TextXAlignment = Enum.TextXAlignment.Center,
-		})
-		local timeLabel = UIKit.text({
-			Parent = cardFrame,
-			Position = UDim2.fromOffset(8, 184),
-			Size = UDim2.new(1, -16, 0, 20),
-			Text = "",
-			TextColor3 = Theme.TextDim,
-			TextSize = 14,
-			TextXAlignment = Enum.TextXAlignment.Center,
-		})
-		local odds = UIKit.text({
-			Name = "Odds",
-			Parent = cardFrame,
-			Position = UDim2.fromOffset(12, 208),
-			Size = UDim2.new(1, -24, 0, 120),
-			Text = "",
-			TextSize = 14,
-			TextYAlignment = Enum.TextYAlignment.Top,
-		})
-		local buy = UIKit.button({
-			parent = cardFrame,
-			text = "Buy",
-			style = "cash",
-			size = UDim2.new(1, -20, 0, 44),
-			position = UDim2.new(0, 10, 1, -54),
-			onClick = function()
-				local result = state.request("BuyCrate", { tier = def.id })
-				if result.ok then
-					registry.SoundController.play("buy")
-					registry.EffectsController.boughtCrate(def.id)
-					ui.toast(def.name .. " bought! Place it on a Crate Pad at Your Farm.", "good")
-				end
-			end,
-		})
-		cards[def.id] = { price = price, time = timeLabel, odds = odds, buy = buy, def = def }
+		odds[rarity] = { gem = gem, label = label }
 	end
+	local buyButton = UIKit.button({
+		parent = detail,
+		text = "Buy",
+		style = "cash",
+		size = fromOffset(inner, 16),
+		position = fromOffset(4, CH - 20),
+		onClick = function()
+			local r = rows[selected]
+			if not r then
+				return
+			end
+			local def = r.def
+			local result = state.request("BuyCrate", { tier = def.id })
+			if result.ok then
+				registry.SoundController.play("buy")
+				registry.EffectsController.boughtCrate(def.id)
+				ui.toast(def.name .. " bought! Place it on a Crate Pad at Your Farm.", "good")
+			end
+		end,
+	})
 
-	local function refresh()
+	-- Crate rows (left) and the note under them
+	local refresh: () -> ()
+	for i, def in sold do
+		local row = UIKit.box(content, 0, (i - 1) * (ROW_H + 1), LIST_W, ROW_H, "row", "TextButton", def.id)
+		row.LayoutOrder = i
+		local face = Instance.new("Frame")
+		face.Name = "Face"
+		face.BackgroundTransparency = 1
+		face.Size = fromOffset(LIST_W, ROW_H)
+		face.ZIndex = UIKit.Z
+		face.Parent = row
+		local icon = UIKit.crateIcon(def.id, 10)
+		icon.Position = fromOffset(3, 6)
+		icon.Parent = face
+		UIKit.label(face, def.name, 15, 3, { name = "Title", width = LIST_W - 18 })
+		local price = UIKit.label(
+			face,
+			Format.cash(def.price),
+			15,
+			12,
+			{ name = "Price", color = P.Yellow, width = LIST_W - 18 }
+		)
+		local press = UIKit.pressable(row, LIST_W, ROW_H, "row", face)
+		row.Activated:Connect(function()
+			registry.SoundController.play("click")
+			selected = def.id
+			refresh()
+		end)
+		rows[def.id] = { row = row, price = price, press = press, def = def }
+	end
+	local noteY = #sold * (ROW_H + 1) + 2
+	local note = UIKit.para(content, 0, noteY, LIST_W, math.max(1, (CH - noteY) // UIKit.LineHeight), {
+		name = "Note",
+		color = P.Mist,
+	})
+
+	local spriteFor = ""
+	refresh = function()
 		local profile = state.profile
 		if not profile then
 			return
@@ -145,40 +162,58 @@ function CrateShopPanel.create(registry: any)
 			total += 1
 		end
 		local full = total >= GameConfig.CrateLimit
-		for _, c in cards do
-			local def = c.def
-			c.time.Text = "Opening Time: " .. Format.duration(Economy.openingTime(def.id, profile))
+		for id, r in rows do
+			r.press.setSelected(id == selected)
+			UIKit.setLabel(
+				r.price,
+				Format.cash(r.def.price),
+				if profile.cash >= r.def.price then P.Yellow else P.Rose
+			)
+		end
+		local r = rows[selected]
+		if r then
+			local def = r.def
+			if spriteFor ~= def.id then
+				spriteFor = def.id
+				spriteHolder:ClearAllChildren()
+				UIKit.sprite(CrateArt.sprite(def.id), 2, { name = "Sprite" }).Parent = spriteHolder
+			end
+			nameText.set(def.name, P.nearest(def.color:Lerp(Color3.new(1, 1, 1), 0.35)))
+			local affordable = profile.cash >= def.price
+			UIKit.setLabel(priceLabel, Format.cash(def.price), if affordable then P.Yellow else P.Rose)
+			UIKit.setLabel(timeLabel, Format.duration(Economy.openingTime(def.id, profile)))
 			local chances = Economy.crateChances(def.id, Economy.upgradeLevel(profile, "luck"))
-			local lines = {}
+			local line = 0
 			for _, rarity in Rarities.Order do
+				local o = odds[rarity]
 				local chance = chances[rarity] or 0
+				o.gem.Visible = chance > 0
+				o.label.Visible = chance > 0
 				if chance > 0 then
-					local info = Rarities.get(rarity) :: any
-					table.insert(
-						lines,
-						string.format(
-							"<font color='%s'>%s</font>  %s",
-							hex(info.color),
-							rarity,
-							Format.percent(chance)
-						)
-					)
+					-- Shown rarities stack from the top.
+					local y = 60 + line * 10
+					o.gem.Position = fromOffset(4, y)
+					o.label.Position = fromOffset(16, y + 1)
+					UIKit.setLabel(o.label, rarity .. "  " .. Format.percent(chance))
+					line += 1
 				end
 			end
-			c.odds.Text = table.concat(lines, "\n")
-			local affordable = profile.cash >= def.price
-			c.price.TextColor3 = if affordable then Theme.Gold else Theme.Bad
-			UIKit.setEnabled(c.buy, near and affordable and not full)
-			UIKit.setText(c.buy, if not near then "Buy at the shop" elseif full then "Crates full" else "Buy")
-		end
-		note.Text = if near
-			then string.format(
-				"You have %s.  Crates: %d / %d",
-				Format.cash(profile.cash),
-				total,
-				GameConfig.CrateLimit
+			UIKit.setEnabled(buyButton, near and affordable and not full)
+			UIKit.setText(
+				buyButton,
+				if not near then "Buy at the shop" elseif full then "Crates full" else "Buy"
 			)
-			else "Walk to the Crate Shop in the plaza to Buy. Luck upgrades improve these odds."
+		end
+		note.set(
+			if near
+				then string.format(
+					"You have %s.  Crates: %d / %d",
+					Format.cash(profile.cash),
+					total,
+					GameConfig.CrateLimit
+				)
+				else "Walk to the Crate Shop in the plaza to Buy. Luck upgrades improve these odds."
+		)
 		goButton.Visible = not near
 	end
 
@@ -194,6 +229,12 @@ function CrateShopPanel.create(registry: any)
 			if connection then
 				connection:Disconnect()
 				connection = nil
+			end
+		end,
+		select = function(tier: string)
+			if rows[tier] then
+				selected = tier
+				refresh()
 			end
 		end,
 	}

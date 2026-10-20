@@ -1,5 +1,6 @@
 --!nonstrict
 -- Every Sorcerer you own. Pick one to see its stats and Place, Pick Up, Upgrade or Sell it.
+-- Pixel window: a scrolling list of portraits on the left, the picked Sorcerer on the right.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,119 +12,113 @@ local Rarities = require(Shared.Config.Rarities)
 local Sorcerers = require(Shared.Config.Sorcerers)
 local Economy = require(Shared.Rules.Economy)
 local Format = require(Shared.Util.Format)
+local Palette = require(Shared.Pixel.Palette)
+local Icons = require(Shared.Pixel.Art.Icons)
 
 local UIKit = require(script.Parent.Parent.UIKit)
-local Theme = require(script.Parent.Parent.Theme)
 
 local SorcerersPanel = {}
 
-local new = UIKit.new
+local P = Palette
+local fromOffset = UDim2.fromOffset
+local W, H = 316, 164
+local CW, CH = W - 8, H - 23
+local LIST_W = 140
+local ROW_W = LIST_W - 4 -- room for the scroll bar
+local ROW_H = 30
+local DETAIL_X = LIST_W + 4
+local DETAIL_W = CW - DETAIL_X
+local INNER = DETAIL_W - 8
+
+local function glowOf(def: any): Color3
+	local rarity = def and Rarities.get(def.rarity)
+	return if rarity then P.nearest(rarity.glow) else P.White
+end
 
 function SorcerersPanel.create(registry: any)
 	local state = registry.StateController
 	local ui = registry.UIController
-	local root, content, scale = UIKit.panel("Sorcerers", Vector2.new(860, 560), function()
+	local root, content, scale = UIKit.panel("Sorcerers", Vector2.new(W, H), function()
 		ui.close()
 	end)
-	local countLabel = UIKit.text({
-		Parent = root,
-		Position = UDim2.new(1, -330, 0, 14),
-		Size = UDim2.fromOffset(260, 28),
-		Text = "",
-		TextColor3 = Theme.TextDim,
-		FontFace = Theme.BodyBold,
-		TextSize = 16,
-		TextXAlignment = Enum.TextXAlignment.Right,
-	})
 
-	-- Left: grid of cards
-	local grid = new("ScrollingFrame", {
-		Name = "Grid",
-		Parent = content,
-		Size = UDim2.new(0, 470, 1, 0),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ScrollBarThickness = 6,
-		ScrollBarImageColor3 = Theme.StrokeSoft,
-		CanvasSize = UDim2.new(),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		new("UIGridLayout", {
-			CellSize = UDim2.fromOffset(146, 92),
-			CellPadding = UDim2.fromOffset(8, 8),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-		UIKit.padding(4),
+	-- Title bar: back to your farm (only while you're somewhere else).
+	local goW = UIKit.textWidth("Go to Your Farm") + 8
+	local slotButton = UIKit.button({
+		parent = root,
+		text = "Go to Your Farm",
+		style = "gold",
+		size = fromOffset(goW, 14),
+		position = fromOffset(W - 2 - UIKit.Window.CloseSize - 2 - goW, 2),
+		onClick = function()
+			ui.close(true)
+			ui.goHome()
+		end,
 	})
-	local empty = UIKit.text({
-		Parent = content,
-		Size = UDim2.new(0, 470, 0, 120),
-		Text = "No Sorcerers yet.\nPlace a Crate on a Crate Pad at Your Farm and Open it.",
-		TextColor3 = Theme.TextDim,
-		TextSize = 16,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Visible = false,
-	})
+	slotButton.ZIndex = 3
+
+	-- Left: count and list
+	local countLabel = UIKit.label(content, "", 0, 0, { name = "Count", color = P.Slate, width = LIST_W })
+	local list = UIKit.scroller(content, 0, 10, LIST_W, CH - 10, "List")
+	local empty = UIKit.para(content, 0, 12, LIST_W, 7, { name = "Empty", color = P.Mist })
 
 	-- Right: details
-	local detail = new("Frame", {
-		Name = "Detail",
-		Parent = content,
-		Position = UDim2.new(0, 486, 0, 0),
-		Size = UDim2.new(1, -486, 1, 0),
-		BackgroundColor3 = Theme.PanelLight,
-		UIKit.corner(14),
-	})
-	local portraitHolder = new("Frame", {
-		Parent = detail,
-		Position = UDim2.fromOffset(0, 4),
-		Size = UDim2.new(1, 0, 0, 170),
-		BackgroundTransparency = 1,
-	})
-	local nameLabel = UIKit.text({
-		Parent = detail,
-		Position = UDim2.fromOffset(14, 172),
-		Size = UDim2.new(1, -28, 0, 34),
-		Text = "",
-		FontFace = Theme.TitleBold,
-		TextSize = 30,
-		TextXAlignment = Enum.TextXAlignment.Center,
-	})
-	local badgeHolder = new("Frame", {
-		Parent = detail,
-		Position = UDim2.fromOffset(0, 208),
-		Size = UDim2.new(1, 0, 0, 24),
-		BackgroundTransparency = 1,
-		UIKit.list(Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center),
-	})
-	local statsLabel = UIKit.text({
-		Name = "Stats",
-		Parent = detail,
-		Position = UDim2.fromOffset(18, 238),
-		Size = UDim2.new(1, -36, 0, 120),
-		Text = "",
-		TextSize = 16,
-		TextYAlignment = Enum.TextYAlignment.Top,
-	})
-	local actions = new("Frame", {
-		Parent = detail,
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 14, 1, -12),
-		Size = UDim2.new(1, -28, 0, 100),
-		BackgroundTransparency = 1,
-		new("UIGridLayout", {
-			CellSize = UDim2.new(0.5, -5, 0, 46),
-			CellPadding = UDim2.fromOffset(10, 8),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-	})
+	local detail = UIKit.box(content, DETAIL_X, 0, DETAIL_W, CH, "well", "Frame", "Detail")
+	local portraitHolder = Instance.new("Frame")
+	portraitHolder.Name = "PortraitHolder"
+	portraitHolder.BackgroundTransparency = 1
+	portraitHolder.Position = fromOffset(4, 4)
+	portraitHolder.Size = fromOffset(48, 48)
+	portraitHolder.ZIndex = UIKit.Z
+	portraitHolder.Parent = detail
+	local colX = 56
+	local nameLabel = UIKit.label(detail, "", colX, 5, { name = "Name", width = DETAIL_W - colX - 4 })
+	local badgeHolder = Instance.new("Frame")
+	badgeHolder.Name = "BadgeHolder"
+	badgeHolder.BackgroundTransparency = 1
+	badgeHolder.Position = fromOffset(colX, 15)
+	badgeHolder.Size = fromOffset(DETAIL_W - colX - 4, 12)
+	badgeHolder.ZIndex = UIKit.Z
+	badgeHolder.Parent = detail
+	local levelLabel = UIKit.label(detail, "", colX, 30, { name = "Level", width = DETAIL_W - colX - 4 })
+	local techniqueLabel =
+		UIKit.label(detail, "", colX, 40, { name = "Technique", width = DETAIL_W - colX - 4 })
+	local statusLabel = UIKit.label(detail, "", 4, 55, { name = "Status", width = INNER })
+	local stats = {}
+	for i, key in { "Orb Value", "Orbs per Second", "Earns" } do
+		local y = 65 + (i - 1) * 9
+		UIKit.label(detail, key, 4, y, { name = "Key" .. i, color = P.Slate })
+		stats[key] = UIKit.label(detail, "", 4, y, {
+			name = "Value" .. i,
+			width = INNER,
+			align = Enum.TextXAlignment.Right,
+		})
+	end
 
 	local selected: string? = nil
 
+	local upgradeButton = UIKit.button({
+		parent = detail,
+		text = "Upgrade",
+		style = "cash",
+		size = fromOffset(INNER, 16),
+		position = fromOffset(4, CH - 38),
+		onClick = function()
+			if selected then
+				local result = state.request("UpgradeSorcerer", { uid = selected })
+				if result.ok then
+					registry.SoundController.play("upgrade")
+				end
+			end
+		end,
+	})
+	local placeW = 60
 	local placeButton = UIKit.button({
-		parent = actions,
+		parent = detail,
 		text = "Place",
 		style = "gold",
-		layoutOrder = 1,
+		size = fromOffset(placeW, 16),
+		position = fromOffset(4, CH - 20),
 		onClick = function()
 			if not selected then
 				return
@@ -138,25 +133,12 @@ function SorcerersPanel.create(registry: any)
 			end
 		end,
 	})
-	local upgradeButton = UIKit.button({
-		parent = actions,
-		text = "Upgrade",
-		style = "cash",
-		layoutOrder = 2,
-		onClick = function()
-			if selected then
-				local result = state.request("UpgradeSorcerer", { uid = selected })
-				if result.ok then
-					registry.SoundController.play("upgrade")
-				end
-			end
-		end,
-	})
 	local sellButton = UIKit.button({
-		parent = actions,
+		parent = detail,
 		text = "Sell",
 		style = "red",
-		layoutOrder = 3,
+		size = fromOffset(INNER - placeW - 2, 16),
+		position = fromOffset(4 + placeW + 2, CH - 20),
 		onClick = function()
 			if selected then
 				local result = state.request("SellSorcerer", { uid = selected })
@@ -168,18 +150,9 @@ function SorcerersPanel.create(registry: any)
 			end
 		end,
 	})
-	local slotButton = UIKit.button({
-		parent = actions,
-		text = "Go to Your Farm",
-		style = "secondary",
-		layoutOrder = 4,
-		onClick = function()
-			ui.close(true)
-			ui.goHome()
-		end,
-	})
 
 	local portraitFor: string? = nil
+	local badgeFor: string? = nil
 	local function showDetail()
 		local profile = state.profile
 		local unit = profile and selected and profile.units[selected]
@@ -188,39 +161,31 @@ function SorcerersPanel.create(registry: any)
 		if not def then
 			return
 		end
-		local rarity = Rarities.get(def.rarity)
 		if portraitFor ~= def.id then
 			portraitFor = def.id
 			portraitHolder:ClearAllChildren()
-			local viewport = UIKit.viewport(def.id, UDim2.fromOffset(170, 170), { spin = true })
-			viewport.AnchorPoint = Vector2.new(0.5, 0)
-			viewport.Position = UDim2.fromScale(0.5, 0)
-			viewport.Parent = portraitHolder
+			UIKit.viewport(def.id, fromOffset(48, 48)).Parent = portraitHolder
 		end
-		nameLabel.Text = def.name
-		nameLabel.TextColor3 = if rarity then rarity.glow else Theme.Text
-		badgeHolder:ClearAllChildren()
-		UIKit.list(Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Center).Parent = badgeHolder
-		UIKit.rarityBadge(def.rarity, 24).Parent = badgeHolder
+		UIKit.setLabel(nameLabel, def.name, glowOf(def))
+		if badgeFor ~= def.rarity then
+			badgeFor = def.rarity
+			badgeHolder:ClearAllChildren()
+			UIKit.rarityBadge(def.rarity).Parent = badgeHolder
+		end
 		local maxLevel = Economy.maxLevel(unit)
 		local slot = state.slotOf(selected :: string)
-		local hex = function(c: Color3)
-			return string.format("#%02x%02x%02x", c.R * 255, c.G * 255, c.B * 255)
+		UIKit.setLabel(levelLabel, string.format("Lv %d / %d", unit.level, maxLevel))
+		UIKit.setLabel(techniqueLabel, def.technique, P.nearest(def.color))
+		if slot then
+			UIKit.setLabel(statusLabel, "Working on slot " .. slot, P.Amber)
+		else
+			UIKit.setLabel(statusLabel, "In inventory", P.Slate)
 		end
-		statsLabel.Text = string.format(
-			"Technique: <font color='%s'><b>%s</b></font>\nLevel <b>%d</b> / %d\nOrb Value: <b>%s</b>\nOrbs per Second: <b>%s</b>\nEarns <font color='#78e678'><b>%s/s</b></font>\n%s",
-			hex(def.color),
-			def.technique,
-			unit.level,
-			maxLevel,
-			Format.cash(Economy.orbValue(unit, profile)),
-			Format.abbreviate(def.ops),
-			Format.cash(Economy.income(unit, profile)),
-			if slot
-				then "<font color='#ffc85a'>Working on slot " .. slot .. "</font>"
-				else "<font color='#a8a0bc'>In inventory</font>"
-		)
+		UIKit.setLabel(stats["Orb Value"], Format.cash(Economy.orbValue(unit, profile)))
+		UIKit.setLabel(stats["Orbs per Second"], Format.abbreviate(def.ops))
+		UIKit.setLabel(stats.Earns, Format.cash(Economy.income(unit, profile)) .. "/s", P.Leaf)
 		UIKit.setText(placeButton, if slot then "Pick Up" else "Place")
+		UIKit.setStyle(placeButton, if slot then "secondary" else "gold")
 		local cost = Economy.unitUpgradeCost(unit)
 		UIKit.setText(upgradeButton, if cost then "Upgrade " .. Format.cash(cost) else "Max level")
 		UIKit.setEnabled(upgradeButton, cost ~= nil and profile.cash >= cost)
@@ -243,90 +208,80 @@ function SorcerersPanel.create(registry: any)
 		if not profile then
 			return
 		end
-		local list = state.sortedUnits(true)
-		countLabel.Text = string.format("%d / %d Sorcerers", #list, GameConfig.InventoryLimit)
-		empty.Visible = #list == 0
+		local entries = state.sortedUnits(true)
+		UIKit.setLabel(countLabel, string.format("%d / %d Sorcerers", #entries, GameConfig.InventoryLimit))
+		empty.set(
+			if #entries == 0
+				then "No Sorcerers yet.\nPlace a Crate on a Crate Pad at Your Farm and Open it."
+				else ""
+		)
 		if not selected or not profile.units[selected] then
-			selected = if list[1] then list[1].uid else nil
+			selected = if entries[1] then entries[1].uid else nil
 		end
 		local seen = {}
-		for order, entry in list do
+		for order, entry in entries do
 			seen[entry.uid] = true
 			local def = Sorcerers.get(entry.unit.id)
-			local rarity = def and Rarities.get(def.rarity)
 			local c = cards[entry.uid]
 			if not c then
-				local button = new("TextButton", {
-					Parent = grid,
-					Text = "",
-					AutoButtonColor = false,
-					BackgroundColor3 = Theme.PanelLight,
-					UIKit.corner(12),
+				local row = UIKit.box(list, 0, 0, ROW_W, ROW_H, "row", "TextButton", "Card")
+				local face = Instance.new("Frame")
+				face.Name = "Face"
+				face.BackgroundTransparency = 1
+				face.Size = fromOffset(ROW_W, ROW_H)
+				face.ZIndex = UIKit.Z
+				face.Parent = row
+				local portrait = UIKit.portrait(entry.unit.id, 1)
+				portrait.Position = fromOffset(3, 3)
+				portrait.Parent = face
+				local name = UIKit.label(face, if def then def.name else "?", 30, 3, {
+					name = "Name",
+					color = glowOf(def),
 				})
-				local stroke = UIKit.stroke(if rarity then rarity.color else Theme.StrokeSoft, 2, 0.2)
-				stroke.Parent = button
-				local icon = UIKit.orbIcon(30, if def then def.color else Theme.Violet)
-				icon.Position = UDim2.fromOffset(8, 8)
-				icon.Parent = button
-				local name = UIKit.text({
-					Parent = button,
-					Position = UDim2.fromOffset(44, 6),
-					Size = UDim2.new(1, -50, 0, 22),
-					Text = if def then def.name else "?",
-					FontFace = Theme.TitleBold,
-					TextSize = 20,
-					TextColor3 = if rarity then rarity.glow else Theme.Text,
+				local level = UIKit.label(face, "", 30, 3, {
+					name = "Level",
+					color = P.Slate,
+					width = ROW_W - 33,
+					align = Enum.TextXAlignment.Right,
 				})
-				local level = UIKit.text({
-					Parent = button,
-					Position = UDim2.fromOffset(44, 28),
-					Size = UDim2.new(1, -50, 0, 16),
-					Text = "",
-					TextColor3 = Theme.TextDim,
-					TextSize = 13,
-				})
-				local income = UIKit.text({
-					Parent = button,
-					Position = UDim2.fromOffset(10, 48),
-					Size = UDim2.new(1, -20, 0, 18),
-					Text = "",
-					TextColor3 = Theme.Cash,
-					FontFace = Theme.BodyBold,
-					TextSize = 14,
-				})
-				local tag = UIKit.text({
-					Parent = button,
-					Position = UDim2.fromOffset(10, 68),
-					Size = UDim2.new(1, -20, 0, 16),
-					Text = "",
-					TextSize = 12,
-				})
-				button.Activated:Connect(function()
+				local income =
+					UIKit.label(face, "", 30, 12, { name = "Income", color = P.Leaf, width = ROW_W - 44 })
+				if def then
+					local gem = UIKit.sprite(Icons.get("rarity_" .. def.rarity), 1, { name = "Gem" })
+					gem.Position = fromOffset(ROW_W - 13, 11)
+					gem.Parent = face
+				end
+				local tag = UIKit.label(face, "", 30, 21, { name = "Tag", width = ROW_W - 33 })
+				local press = UIKit.pressable(row, ROW_W, ROW_H, "row", face)
+				row.Activated:Connect(function()
 					registry.SoundController.play("click")
 					selected = entry.uid
 					for uid, other in cards do
-						other.button.BackgroundColor3 = if uid == selected
-							then Theme.PanelLighter
-							else Theme.PanelLight
+						other.press.setSelected(uid == selected)
 					end
 					showDetail()
 				end)
-				c = { button = button, level = level, income = income, tag = tag, name = name }
+				c = { row = row, level = level, income = income, tag = tag, name = name, press = press }
 				cards[entry.uid] = c
 			end
-			c.button.LayoutOrder = order
-			c.button.BackgroundColor3 = if entry.uid == selected then Theme.PanelLighter else Theme.PanelLight
-			c.level.Text = string.format("Lv %d  -  %s", entry.unit.level, if def then def.rarity else "")
-			c.income.Text = Format.cash(entry.income) .. "/s"
-			c.tag.Text = if entry.slot then "On slot " .. entry.slot else "Not placed"
-			c.tag.TextColor3 = if entry.slot then Theme.Gold else Theme.TextFaint
+			c.row.LayoutOrder = order
+			c.row.Position = fromOffset(0, (order - 1) * (ROW_H + 1))
+			c.press.setSelected(entry.uid == selected)
+			UIKit.setLabel(c.level, "Lv " .. entry.unit.level)
+			UIKit.setLabel(c.income, Format.cash(entry.income) .. "/s")
+			if entry.slot then
+				UIKit.setLabel(c.tag, "On slot " .. entry.slot, P.Amber)
+			else
+				UIKit.setLabel(c.tag, "Not placed", P.Slate)
+			end
 		end
 		for uid, c in cards do
 			if not seen[uid] then
-				c.button:Destroy()
+				c.row:Destroy()
 				cards[uid] = nil
 			end
 		end
+		UIKit.setCanvas(list, #entries * (ROW_H + 1))
 		showDetail()
 	end
 

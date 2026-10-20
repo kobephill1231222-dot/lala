@@ -173,11 +173,11 @@ function ClientHarness.new(placePath, options)
 	self.errors = {}
 	local game = Sandbox.loadPlace(placePath)
 	self.game = game
-	-- Stand-in art for any Art module that doesn't exist yet (while the art is being drawn).
+	-- Optional stand-in art (options.stubArt = a folder of <Name>.luau) for any Art module the
+	-- place doesn't have.
 	local stubDir = options.stubArt
-		or "/tmp/claude-0/-home-user-lala/1f2f6715-7022-544d-949c-f1301017a1f7/scratchpad/stub/"
 	local pixel = game:GetService("ReplicatedStorage").Shared:FindFirstChild("Pixel")
-	if pixel and fs.isDir(stubDir) then
+	if pixel and stubDir and fs.isDir(stubDir) then
 		local art = pixel:FindFirstChild("Art")
 		if not art then
 			art = roblox.Instance.new("Folder")
